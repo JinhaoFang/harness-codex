@@ -1,0 +1,6 @@
+interface:
+  display_name: "Dev / 写方案（Plan）"
+  short_description: "写/更新 Plan Doc（规格真源），并回填 workflow 的状态引用"
+  default_prompt: "Use $dev-write-plan to draft or revise the canonical plan from frozen decisions and current truth anchors."
+policy:
+  allow_implicit_invocation: false

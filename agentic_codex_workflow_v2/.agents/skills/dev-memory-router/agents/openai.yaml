@@ -1,0 +1,6 @@
+interface:
+  display_name: "Dev / 记忆路由（写回）"
+  short_description: "把 workflow 的长期价值写回 .agentdocs 长期记忆（architecture/ 或 insights）"
+  default_prompt: "Use $dev-memory-router to decide whether verified findings belong in architecture memory or insights memory."
+policy:
+  allow_implicit_invocation: false

@@ -1,0 +1,6 @@
+interface:
+  display_name: "Dev / 终审与归档"
+  short_description: "终审收尾：验证证据 + 记忆写回 + 归档 done"
+  default_prompt: "Use $dev-final-review-and-archive only when a legacy session still references this compatibility close-review entry."
+policy:
+  allow_implicit_invocation: false

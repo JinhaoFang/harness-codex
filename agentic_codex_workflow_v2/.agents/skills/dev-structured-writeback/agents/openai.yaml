@@ -1,0 +1,6 @@
+interface:
+  display_name: "Dev / 结构化写回"
+  short_description: "通过 taskctl 稳定写入 review、evidence 与 workflow event"
+  default_prompt: "Use $dev-structured-writeback to persist prepared review, evidence, or workflow-event data through taskctl."
+policy:
+  allow_implicit_invocation: false

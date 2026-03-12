@@ -1,0 +1,6 @@
+interface:
+  display_name: "Dev / 初始化工作台（.agentdocs）"
+  short_description: "创建/恢复当前 workflow，并补齐 .agentdocs 的基础目录与模板"
+  default_prompt: "Use $dev-workflow-bootstrap to create or resume the current task-scoped .agentdocs workspace before planning or execution."
+policy:
+  allow_implicit_invocation: false

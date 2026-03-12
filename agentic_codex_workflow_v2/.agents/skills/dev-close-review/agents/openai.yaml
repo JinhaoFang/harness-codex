@@ -1,0 +1,6 @@
+interface:
+  display_name: "Dev / 收尾评审"
+  short_description: "独立执行 CLOSE_REVIEW，并返回 PASS / NEEDS_FIX / BLOCKED"
+  default_prompt: "Use $dev-close-review to perform an independent CLOSE_REVIEW from the current task pack and return a final status."
+policy:
+  allow_implicit_invocation: false

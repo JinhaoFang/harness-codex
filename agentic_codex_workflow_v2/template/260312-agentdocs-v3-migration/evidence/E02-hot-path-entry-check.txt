@@ -1,0 +1,5 @@
+current_entry=DEFAULT .agentdocs/archive/260312-agentdocs-v3-migration/workflow.md
+archive_entry_count=2
+stale_260309_pointer_present=False
+old_v2_current_task_heading_present=False
+archive_index_parse_ok=True
