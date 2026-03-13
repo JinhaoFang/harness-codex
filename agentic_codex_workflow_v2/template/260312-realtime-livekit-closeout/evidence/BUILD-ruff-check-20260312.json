@@ -1,0 +1,19 @@
+{
+  "evidence_id": "BUILD-ruff-check-20260312",
+  "phase": "P2",
+  "purpose": "Targeted lint for realtime closeout scope",
+  "command": "UV_CACHE_DIR=.uv_cache uv run ruff check services/livekit_agent services/agentscope_runtime tests/services/livekit_agent tests/services/agentscope_runtime/test_voice_mode_prompt.py tests/api/v1/test_rtc_token.py",
+  "cwd": "/root/project/AstraFlow_v0.1",
+  "ran_at": "2026-03-12 21:59 +0800",
+  "exit_code": "0",
+  "result": "PASS",
+  "output_path": "",
+  "output_excerpt": "warning: VIRTUAL_ENV mismatch ignored; All checks passed!",
+  "related_artifacts": [
+    "services/livekit_agent/pyproject.toml",
+    "services/livekit_agent/README.md",
+    ".agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-e4-acceptance-and-regression-pack-2026-03-12.md"
+  ],
+  "notes": "",
+  "reviewer_recheck": "Confirm lint scope still matches frozen realtime closeout boundary only."
+}

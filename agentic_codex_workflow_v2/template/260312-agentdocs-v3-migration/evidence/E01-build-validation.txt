@@ -1,4 +1,0 @@
-issues= []
-current_entries= [('DEFAULT', '.agentdocs/archive/260312-agentdocs-v3-migration/workflow.md', 'Agentdocs V3 运行模型迁移')]
-archive_entries= [('260308-agentdocs-v2-migration', 'Agentdocs V2 文档迁移（兼容层 + 长期文档收敛）', '.agentdocs/archive/260308-agentdocs-v2-migration/workflow.md', '2026-03-08 22:00 +0800'), ('260308-backend-architecture-reorg', 'Backend 文档体系重构（代码映射驱动）', '.agentdocs/archive/260308-backend-architecture-reorg/workflow.md', '2026-03-09 00:12 +0800')]
-insights_migration_section= True

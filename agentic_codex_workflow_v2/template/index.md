@@ -3,6 +3,7 @@
 > V3 运行入口只承载当前任务、长期知识入口、兼容边界与可恢复导航；旧索引里的长期记忆已按去向迁入 `insights.md`、现有 `architecture/*.md` 引用或保留为操作提示。
 
 ## 0) 快速入口（新会话默认只读）
+
 - 仓库规则：`AGENTS.md`
 - 当前任务 workflow：见 `## 2) 当前任务（SSOT）`
 - 当前任务 task pack：从当前 task root 下的 `task-packs/` 进入
@@ -13,6 +14,7 @@
 - task pack 契约：`docs/dev/contracts/task-pack-layout.md`
 
 ## 1) Context Map（按需检索）
+
 - 看产品与范围：`.agentdocs/prd/product-spec.md`
 - 看长期经验：`.agentdocs/insights.md`
 - 看后端/数据：`.agentdocs/architecture/backend_system_overview.md`、`.agentdocs/architecture/backend_data_and_sync.md`
@@ -28,6 +30,7 @@
 <!-- NONE -->
 
 ## 3) 长期知识（Canonical / Reusable）
+
 - `insights.md`：跨任务可复用的工程/迁移/治理经验；本轮已吸收旧 index 的“全局重要记忆”正文。
 - `architecture/backend_system_overview.md`：后端系统总览与服务边界。
 - `architecture/backend_data_and_sync.md`：Electric / FastAPI / 数据同步与写路径口径。
@@ -38,8 +41,10 @@
 - `architecture/backend_technical_debt.md`：长期技术债清单。
 
 ## 4) 兼容、治理与操作提示
+
 - 新的高熵任务统一进入 `.agentdocs/tasks/<task-id>/`，由 `workflow.md` / `plan.md` / `task-packs/` 承担当前运行时 SSOT。
 - `.agentdocs/workflow/*.md` 继续保留为 legacy reference layer，用于兼容旧路径引用；若要继续演进某个 legacy 主题，应新建 task-scoped 任务并回链原文。
+- legacy workflow 迁移清单（删除前必读）：`.agentdocs/archive/260312-fastapi-agent-closeout/findings/p3-legacy-workflow-migration.md`
 - `.agentdocs/workflow/done/` 是旧版归档层，不等同于新的 `.agentdocs/archive/` task bundle archive。
 - legacy `backend/**` 与旧名 `architecture/**` 文件继续保留为兼容 stub / pointer，不再作为活跃 SoT；长期事实优先读取上面的 canonical architecture 文档。
 - 旧 index 的“全局重要记忆”已经分流：
@@ -50,11 +55,13 @@
 - Git 推送前必须运行 `/skill pre-push-check`
 
 ## 5) Archive 与 Legacy 导航
+
 - 新 archive task bundle 入口：`.agentdocs/archive/index.md`
 - archive task bundle 明细统一从 `.agentdocs/archive/index.md` 进入，避免在本索引重复维护一份会自行陈旧的列表。
 - 旧 `workflow/done/` 任务仍可读，但只作为 legacy reference，不会被冒充为新 archive bundle。
 
 ## 6) Legacy workflow 参考文档
+
 - `workflow/260104-migrate-backend-docs-to-fastapi-boilerplate.md` - 基于 FastAPI-boilerplate 重构后端设计文档
 - `workflow/260111-agent-backend-architecture-setup.md` - Agent Backend 架构评价与实施路径建议
 - `workflow/260118-agent-backend-macro-architecture-analysis.md` - Agent 后端宏观架构分析
@@ -72,12 +79,15 @@
 - `workflow/2602281120-runtime-business-audit.md` - Runtime 业务架构与工程规范审查
 
 ## 7) Legacy 已归档任务（workflow/done）
+
 ### Realtime
+
 - `workflow/done/2602121231-realtime-livekit-review-fix-task.md` - Realtime（LiveKit）代码审查与修复任务
 - `workflow/done/2602121245-livekit-agent-structure-refactor-task.md` - livekit_agent 目录结构重排任务
 - `workflow/done/2602121535-livekit-compose-env-source-unify-task.md` - LiveKit compose 环境变量来源统一任务
 
 ### Chat
+
 - `workflow/done/2602091241-chat-responses-streaming-issues-analysis.md` - `/api/v1/chat` / `/api/v1/responses` 五个问题复盘与根因分析
 - `workflow/done/2602091744-chat-coldstart-history-state-fix-task.md` - `/api/v1/chat` 冷启动回填 + agent_state 双写修复任务
 - `workflow/done/2602091926-chat-fix-review.md` - `/api/v1/chat` 修复审查与 E2E 失败复盘
@@ -85,4 +95,5 @@
 - `workflow/done/2602101756-attachments-awareness-hint-design.md` - 附件感知与冷启动回填修复方案设计文档
 
 ### Voice
+
 - `workflow/done/2602061616-agent-voice-kickoff-review.md` - 语音能力接入 Kickoff 评审与落地准备

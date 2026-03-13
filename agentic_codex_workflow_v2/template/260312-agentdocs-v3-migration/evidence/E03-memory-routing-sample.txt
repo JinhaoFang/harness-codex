@@ -1,5 +1,0 @@
-insights_migration_section_present=True
-sample_product_memory_in_insights=True
-sample_architecture_pointer_in_insights=True
-sample_legacy_backend_stub_note_in_index=True
-old_global_memory_block_present_in_index=False

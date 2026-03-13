@@ -32,7 +32,7 @@
 
 - 只在文档里声明共享配置、身份字段或服务间约束是不够的；只要它会被 FastAPI / runtime / worker 等多个边界共同依赖，就应补充测试或验证梯子来锁定口径。
 - 这样能减少“文档已更新但实现漂移”的隐性回归。
-- 来源：`.agentdocs/workflow/2602281120-runtime-business-audit.md`
+- 来源：`tests/services/agentscope_runtime/test_runtime_settings_alignment.py`、`services/agentscope_runtime/core/settings.py`
 
 ### 5. 旧 index 全局记忆迁移（2026-03-12）
 

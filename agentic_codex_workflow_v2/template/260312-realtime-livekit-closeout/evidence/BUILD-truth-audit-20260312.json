@@ -1,0 +1,18 @@
+{
+  "evidence_id": "BUILD-truth-audit-20260312",
+  "phase": "P1",
+  "purpose": "Task-scoped realtime truth alignment and drift classification",
+  "command": "rg -n \"openai>=1.0.0|AsyncOpenAI|false interruption resume|pause -> confirm/resume|Retry-After|interrupt.*5xx|E4|Jaeger 结构验证|lk.transcription|first_audio_latency_ms\" services/livekit_agent/pyproject.toml services/livekit_agent/README.md services/livekit_agent/adapters/dashscope_asr.py services/livekit_agent/app/worker_entrypoint.py tests/services/livekit_agent/core/test_interruption_gate.py tests/services/livekit_agent/adapters/test_fastapi_internal_client.py tests/services/livekit_agent/adapters/test_livekit_text_stream.py tests/services/agentscope_runtime/test_voice_mode_prompt.py tests/api/v1/test_rtc_token.py .agentdocs/workflow/2602102130-realtime-livekit-agent-task.md .agentdocs/workflow/2602121821-livekit-agent-e3-hardening-tracing-task.md .agentdocs/workflow/2602131031-realtime-livekit-fix-execution-task.md .agentdocs/workflow/2602131414-realtime-e3-enhancements-voice-mode-e4-task.md .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-e4-acceptance-and-regression-pack-2026-03-12.md",
+  "cwd": "/root/project/AstraFlow_v0.1",
+  "ran_at": "2026-03-12 21:59 +0800",
+  "exit_code": "0",
+  "result": "PASS",
+  "output_path": ".agentdocs/archive/260312-realtime-livekit-closeout/scratch/p1-truth-audit-20260312.txt",
+  "output_excerpt": "Truth audit confirms explicit openai dependency, false interruption resume, retry coverage, lk.transcription visibility, and E4 pack handoff anchors.",
+  "related_artifacts": [
+    ".agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md",
+    ".agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-e4-acceptance-and-regression-pack-2026-03-12.md"
+  ],
+  "notes": "",
+  "reviewer_recheck": "Verify closeout claims still map to current code/tests and not only to legacy workflow text."
+}
