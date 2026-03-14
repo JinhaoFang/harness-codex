@@ -147,13 +147,3 @@ So we built the **Claude Code Guide subagent** which Claude is prompted to call 
 While this isn't perfect (Claude can still get confused when you ask it about how to set itself up), it is much better than it used to be! **We were able to add things to Claude's action space without adding a tool.**
 
 ---
-
-## Conclusion
-
-If you were hoping for a set of rigid rules on how to build your tools, unfortunately that is not this guide. Designing the tools for your models is as much an art as it is a science. It depends heavily on:
-
-- The model you're using
-- The goal of the agent
-- The environment it's operating in
-
-**Experiment often, read your outputs, try new things. See like an agent.**

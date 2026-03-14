@@ -20,6 +20,7 @@
 workflow / plan / task pack 中的 `Evidence Ref` 必须指向真实路径。
 
 `Evidence Ref` 与 `Review Ref` 是两种不同类型的引用：
+
 - `Evidence Ref` 只指向事实证据
 - `Review Ref` 只指向评审结论
 - `reviews/*.json` 不得充当 `Evidence Ref`
@@ -82,7 +83,7 @@ workflow / plan / task pack 中的 `Evidence Ref` 必须指向真实路径。
 
 这让 main agent 不需要再手动打开 evidence 目录才能知道结果。
 
-## 7. 推荐工具：evidence_run（自动生成最小 bundle）
+## 7. 推荐工具：evidence_run（自动生成 bundle）
 
 ```bash
 python .agents/skills/dev-agentdocs-check/scripts/evidence_run.py   --workflow .agentdocs/tasks/<task-id>/workflow.md   --phase P1   --cwd .   -- pytest -q

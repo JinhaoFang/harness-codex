@@ -12,6 +12,7 @@ updated_at: 2026-03-12 22:13 +0800
 # Workflow：快速开发版收尾：Realtime + LiveKit
 
 ## 0) 状态头部
+
 - Current State: ARCHIVE
 - Allowed Next State: <none>
 - Exception Status: NONE
@@ -30,7 +31,7 @@ updated_at: 2026-03-12 22:13 +0800
     - 已完成：对照 `.agentdocs/workflow/*`、`services/livekit_agent/**`、`tests/services/livekit_agent/**`、`services/agentscope_runtime/**` 做了 Realtime 状态审计。
     - 已完成：确认 `false interruption resume`、`5xx/断流重试`、`voice-mode thinking` 等多项 legacy TODO 已由后续子任务和代码实现覆盖。
     - 已完成：补齐 `services/livekit_agent/pyproject.toml` / `uv.lock` 的 `openai` 显式依赖声明，并统一 README / 关键 legacy workflow 状态。
-    - 已完成：写入 `E4` 手动验收与最小自动化回归包：`.agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-e4-acceptance-and-regression-pack-2026-03-12.md`
+    - 已完成：写入 `E4` 手动验收与自动化回归包：`.agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-e4-acceptance-and-regression-pack-2026-03-12.md`
     - 已完成：targeted verification 通过（`ruff check` + `pytest`，`48 passed, 2 warnings`）。
     - 已完成：`CLOSE_REVIEW` r1 = PASS；当前 task 已达到 archive-ready（代码/文档 closeout）。
   - Key Decisions:
@@ -55,12 +56,14 @@ updated_at: 2026-03-12 22:13 +0800
 ---
 
 ## 1) Discuss / Align Proof
+
 ### 1.1 Task Definition
+
 - Problem:
   - `.agentdocs/workflow/` 下存在多份 realtime/livekit 文档，主 SoT、修复计划、执行记录、优化建议彼此交叉，部分 TODO 已被后续子任务覆盖但未回填。
   - 当前代码事实表明 realtime 主链路已完成到较高程度，但仍缺少一个 task-scoped SSOT，把“真实剩余项”“文档漂移”“明确延后项”分开。
 - Goal:
-  - 为 realtime/livekit 建立当前轮次的 closeout 闭包：补齐真正剩余的代码/文档项，写清 `E4` 验收与最小回归口径，并把遗留 workflow 漂移统一收束。
+  - 为 realtime/livekit 建立当前轮次的 closeout 闭包：补齐真正剩余的代码/文档项，写清 `E4` 验收与回归口径，并把遗留 workflow 漂移统一收束。
 - In Scope:
   - Realtime / LiveKit 文档-代码-测试对齐：
     - `.agentdocs/workflow/2602102130-realtime-livekit-agent-task.md`
@@ -69,7 +72,7 @@ updated_at: 2026-03-12 22:13 +0800
     - `.agentdocs/workflow/2602131414-realtime-e3-enhancements-voice-mode-e4-task.md`
     - `.agentdocs/workflow/2602131555-livekit-agent-false-interruption-resume-task.md`
   - 真实尾项收口：
-    - `E4` 手动验收清单与最小自动化回归范围
+    - `E4` 手动验收清单与自动化回归范围
     - `services/livekit_agent/pyproject.toml` 的 `openai` 显式依赖
     - `services/livekit_agent/README.md` 与关键 legacy workflow 的状态统一
   - 质量与证据：
@@ -84,7 +87,7 @@ updated_at: 2026-03-12 22:13 +0800
   - realtime/livekit 的“已完成 / 文档漂移 / 真实未完成”清单可复核，并落到本 task SSOT。
   - `openai` 显式依赖风险被处理或被明确记录为受控例外。
   - `README` 与最关键的 legacy realtime workflow 状态不再和代码事实冲突。
-  - `E4` 手动验收清单与最小自动化回归范围落盘，可直接执行。
+  - `E4` 手动验收清单与自动化回归范围落盘，可直接执行。
   - realtime 相关 targeted lint/tests 通过，并产出 evidence bundle。
 - Constraints:
   - 不突破已冻结架构边界：livekit-agent 不直连 runtime/DB；推理必须经 FastAPI `/internal/responses`。
@@ -92,10 +95,11 @@ updated_at: 2026-03-12 22:13 +0800
   - legacy workflow 仍是 reference layer；只更新必要文件，不维护成第二套活 SoT。
 - Top Risks:
   - 误把“已完成但没回填”的条目当成真实缺口，导致 scope 膨胀。
-  - 为了追求“收尾”而顺手引入新优化（如 WS TTS / 体验增强），打破最小闭包。
+  - 为了追求“收尾”而顺手引入新优化（如 WS TTS / 体验增强），打破闭包。
   - 手动验收与 Jaeger 结构验证依赖环境，若环境未就绪需要降级成明确 UAT 义务。
 
 ### 1.2 95% Understanding Check
+
 - Goal Clear: YES
 - Scope Clear: YES
 - Non-Goals Clear: YES
@@ -106,6 +110,7 @@ updated_at: 2026-03-12 22:13 +0800
 - Open Questions Controlled: YES
 
 ### 1.3 Current Truth Anchors
+
 - Code Paths:
   - `.agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md`
   - `services/livekit_agent/**`
@@ -134,6 +139,7 @@ updated_at: 2026-03-12 22:13 +0800
   - 当前事实优先级：代码 / 测试 / 配置 / 运行证据 > legacy workflow 叙述。
 
 ### 1.4 Context Coverage
+
 - Must Read:
   - `AGENTS.md`
   - `.agentdocs/prd/product-spec.md`
@@ -158,6 +164,7 @@ updated_at: 2026-03-12 22:13 +0800
 ---
 
 ## 2) Workflow State Machine
+
 - Normal Path: DISCUSS -> ALIGN_PROOF -> BOOTSTRAP -> ISSUE_SYNC -> PLAN_DRAFT -> PLAN_REVIEW -> BUILD -> CLOSE_REVIEW -> ARCHIVE
 - Current State Owner: main
 - Transition Check: PASS (CLOSE_REVIEW -> ARCHIVE; CLOSE_REVIEW r1 PASS; archived bounded realtime/livekit closeout task. Manual compose/App/Playground/Jaeger checks remain explicit UAT obligations if run later.)
@@ -167,6 +174,7 @@ updated_at: 2026-03-12 22:13 +0800
 ---
 
 ## 3) Plan Status
+
 - Plan Doc Path: .agentdocs/archive/260312-realtime-livekit-closeout/plan.md
 - Draft Status: READY_FOR_REVIEW
 - Review Status: PASS
@@ -178,14 +186,16 @@ updated_at: 2026-03-12 22:13 +0800
 ---
 
 ## 4) Phase Board（执行 phase SSOT）
-| Phase | Spec Ref | Owner | Status | Verification | Evidence Ref | Task Pack | Handoff |
-|---|---|---|---|---|---|---|---|
-| P1 | Plan §12.P1 | main | DONE | Truth audit + findings snapshot + drift classification | .agentdocs/archive/260312-realtime-livekit-closeout/evidence/BUILD-truth-audit-20260312.json | .agentdocs/archive/260312-realtime-livekit-closeout/task-packs/BUILD-task-pack.md | realtime truth matrix fixed；legacy TODO 已分类为“已完成 / closeout remaining / 延后项” |
-| P2 | Plan §12.P2 | main | DONE | Explicit dependency closure + README/workflow cleanup + targeted lint | .agentdocs/archive/260312-realtime-livekit-closeout/evidence/BUILD-ruff-check-20260312.json | .agentdocs/archive/260312-realtime-livekit-closeout/task-packs/BUILD-task-pack.md | `openai` 从传递依赖升级为显式契约；关键文档状态不再误导 |
-| P3 | Plan §12.P3 | main | DONE | E4 acceptance pack + minimum regression pytest | .agentdocs/archive/260312-realtime-livekit-closeout/evidence/BUILD-pytest-20260312.json | .agentdocs/archive/260312-realtime-livekit-closeout/task-packs/BUILD-task-pack.md | E4 手动验收、Jaeger 检查、remaining UAT obligation 已固化到 task-scoped pack |
-| P4 | Plan §12.P4 | close_reviewer | DONE | CLOSE_REVIEW r1 PASS | .agentdocs/archive/260312-realtime-livekit-closeout/evidence/P4-close-review-pass-20260312.json | .agentdocs/archive/260312-realtime-livekit-closeout/task-packs/CLOSE_REVIEW-task-pack.md | See `.agentdocs/archive/260312-realtime-livekit-closeout/reviews/close-review-r1.json` |
+
+| Phase | Spec Ref    | Owner          | Status | Verification                                                          | Evidence Ref                                                                                    | Task Pack                                                                                | Handoff                                                                                 |
+| ----- | ----------- | -------------- | ------ | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| P1    | Plan §12.P1 | main           | DONE   | Truth audit + findings snapshot + drift classification                | .agentdocs/archive/260312-realtime-livekit-closeout/evidence/BUILD-truth-audit-20260312.json    | .agentdocs/archive/260312-realtime-livekit-closeout/task-packs/BUILD-task-pack.md        | realtime truth matrix fixed；legacy TODO 已分类为“已完成 / closeout remaining / 延后项” |
+| P2    | Plan §12.P2 | main           | DONE   | Explicit dependency closure + README/workflow cleanup + targeted lint | .agentdocs/archive/260312-realtime-livekit-closeout/evidence/BUILD-ruff-check-20260312.json     | .agentdocs/archive/260312-realtime-livekit-closeout/task-packs/BUILD-task-pack.md        | `openai` 从传递依赖升级为显式契约；关键文档状态不再误导                                 |
+| P3    | Plan §12.P3 | main           | DONE   | E4 acceptance pack + minimum regression pytest                        | .agentdocs/archive/260312-realtime-livekit-closeout/evidence/BUILD-pytest-20260312.json         | .agentdocs/archive/260312-realtime-livekit-closeout/task-packs/BUILD-task-pack.md        | E4 手动验收、Jaeger 检查、remaining UAT obligation 已固化到 task-scoped pack            |
+| P4    | Plan §12.P4 | close_reviewer | DONE   | CLOSE_REVIEW r1 PASS                                                  | .agentdocs/archive/260312-realtime-livekit-closeout/evidence/P4-close-review-pass-20260312.json | .agentdocs/archive/260312-realtime-livekit-closeout/task-packs/CLOSE_REVIEW-task-pack.md | See `.agentdocs/archive/260312-realtime-livekit-closeout/reviews/close-review-r1.json`  |
 
 规则：
+
 - 这里只跟踪执行 phase；`PLAN_REVIEW / CLOSE_REVIEW` 结论写在专门的 review 区块
 - `Status = DONE` 时，`Verification` 与 `Evidence Ref` 必须同时非空
 - `Evidence Ref` 只能指向 `.agentdocs/.../evidence/*.json`
@@ -194,6 +204,7 @@ updated_at: 2026-03-12 22:13 +0800
 ---
 
 ## 5) Build Log
+
 > 只记录可审计内容：关键决策、关键变更、关键验证、阻塞与恢复。
 
 - YYYY-MM-DD HH:MM — ...
@@ -218,7 +229,9 @@ updated_at: 2026-03-12 22:13 +0800
 ---
 
 ## 6) Evidence Ledger
+
 ### E01
+
 - Evidence ID: BUILD-truth-audit-20260312
 - Phase: P1
 - Purpose: Task-scoped realtime truth alignment and drift classification
@@ -237,6 +250,7 @@ updated_at: 2026-03-12 22:13 +0800
 - Reviewer Recheck: Verify closeout claims still map to current code/tests and not only to legacy workflow text.
 
 ### E02
+
 - Evidence ID: BUILD-ruff-check-20260312
 - Phase: P2
 - Purpose: Targeted lint for realtime closeout scope
@@ -255,6 +269,7 @@ updated_at: 2026-03-12 22:13 +0800
 - Reviewer Recheck: Confirm lint scope still matches frozen realtime closeout boundary only.
 
 ### E03
+
 - Evidence ID: BUILD-pytest-20260312
 - Phase: P3
 - Purpose: Minimum automated regression for realtime/livekit closeout
@@ -275,6 +290,7 @@ updated_at: 2026-03-12 22:13 +0800
 - Reviewer Recheck: Confirm automated regression set still covers frozen E4 closeout claims without expanding scope.
 
 ### E04
+
 - Evidence ID: P4-close-review-pass-20260312
 - Phase: P4
 - Purpose: Record CLOSE_REVIEW r1 PASS and confirm archive readiness for bounded realtime closeout.
@@ -295,6 +311,7 @@ updated_at: 2026-03-12 22:13 +0800
 ---
 
 ## 7) Runtime Pointers
+
 - Active Task Pack: .agentdocs/archive/260312-realtime-livekit-closeout/task-packs/CLOSE_REVIEW-task-pack.md
 - Current Phase Mode: CLOSE_REVIEW
 - Spec Source: .agentdocs/archive/260312-realtime-livekit-closeout/plan.md
@@ -306,12 +323,14 @@ updated_at: 2026-03-12 22:13 +0800
 ---
 
 ## 8) Memory Routing
+
 ### Candidates
+
 - Destination: architecture/agent_runtime_overview.md | insights.md
 - Rule: 仅把“跨任务稳定复用的 runtime/realtime 经验”写回长期层；task-scoped 事实和 closeout 结论留在本 task。
 - Why: realtime closeout 主要是状态统一与验收口径，不应污染长期 canonical 结构。
 - Trigger: 若本轮沉淀出稳定的 LiveKit 验收/观测规则或依赖治理经验。
-- Example: `openai` 传递依赖风险、TextStream/Playground 验收经验、Jaeger 关键字段最小集合。
+- Example: `openai` 传递依赖风险、TextStream/Playground 验收经验、Jaeger 关键字段集合。
 - Source Workflow: .agentdocs/archive/260312-realtime-livekit-closeout/workflow.md
 - Last Verified: 2026-03-12
 - Verification Source: .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md
@@ -319,10 +338,13 @@ updated_at: 2026-03-12 22:13 +0800
 ---
 
 ## 9) Issue Sync
+
 ### Summary
+
 - 本 task 不做 GitHub issue 镜像；所有状态只在 task-scoped SSOT 中维护。
 
 ### Checklist
+
 - [x] 冻结 closeout 范围（E4 / explicit dependency / doc drift）
 - [x] 生成 `PLAN_REVIEW` task pack
 - [x] 进入独立 plan review
@@ -333,20 +355,22 @@ updated_at: 2026-03-12 22:13 +0800
 ---
 
 ## 10) Plan Review
+
 - Reviewer Session: .agentdocs/archive/260312-realtime-livekit-closeout/reviews/plan-review-r1.json
 - Review Mode Used: FULL_REVIEW
 - Decision: PASS
 - Summary: Plan is correctly frozen to E4 acceptance closure, explicit openai dependency declaration, and README/workflow status unification; completed items like false interruption resume, 5xx retry, and voice-mode thinking are not being reopened.
-- Required Changes: 
+- Required Changes:
 - Evidence: .agentdocs/archive/260312-realtime-livekit-closeout/task-packs/PLAN_REVIEW-task-pack.md; .agentdocs/archive/260312-realtime-livekit-closeout/plan.md; .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md; services/livekit_agent/README.md; services/livekit_agent/pyproject.toml; services/livekit_agent/adapters/dashscope_asr.py; services/livekit_agent/uv.lock
 - Recheck Scope: In CLOSE_REVIEW, recheck only the bounded build outputs for openai dependency, README/legacy workflow cleanup, and E4 checklist/minimal regression artifacts.
 - Global Impact: Task-scoped realtime closeout only; no API or architecture expansion approved.
 - Materials Accessed: .agentdocs/archive/260312-realtime-livekit-closeout/task-packs/PLAN_REVIEW-task-pack.md; .agentdocs/archive/260312-realtime-livekit-closeout/plan.md; .agentdocs/archive/260312-realtime-livekit-closeout/workflow.md; .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md; .agentdocs/workflow/2602102130-realtime-livekit-agent-task.md; .agentdocs/workflow/2602131031-realtime-livekit-fix-execution-task.md; .agentdocs/workflow/2602131414-realtime-e3-enhancements-voice-mode-e4-task.md; .agentdocs/workflow/2602131555-livekit-agent-false-interruption-resume-task.md; services/livekit_agent/README.md; services/livekit_agent/pyproject.toml; services/livekit_agent/adapters/dashscope_asr.py; services/livekit_agent/uv.lock
-- Open Questions: 
+- Open Questions:
 
 ---
 
 ## 11) Final Review / Archive
+
 - Reviewer Session: .agentdocs/archive/260312-realtime-livekit-closeout/reviews/close-review-r1.json
 - Review Mode Used: FULL_REVIEW
 - Final Status: PASS
@@ -366,6 +390,7 @@ updated_at: 2026-03-12 22:13 +0800
 ---
 
 ## 12) Exception Recovery
+
 - Status: NONE
 - Trigger:
 - Impact:

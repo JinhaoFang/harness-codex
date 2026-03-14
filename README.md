@@ -1,6 +1,6 @@
 # Agentic Codex Workflow
 
-> 让 AI 编程 Agent 的开发过程变得**可复现、可验证、可回滚、可断点重续、可持续演进**。
+> 让 AI 编程 Agent 的开发过程变得**可复现、可验证、可回滚、可断点重续、可持续演进、上下文不腐烂**。
 
 ## 概述
 
@@ -10,8 +10,9 @@ Agentic Codex Workflow 是一套面向 AI Coding Agent（如 Claude Code、OpenA
 
 - **控制平面不能覆盖事实平面**：文档约束动作，代码/测试/运行结果反映真实状态
 - **理解度未达 95% 禁止开工**：目标、范围、验收、风险任一不明确即停止
-- **结构化写回优先**：review/evidence/event 通过脚本完成，避免手工维护
+- **结构化写回优先**：review/evidence/event 通过脚本完成，避免手工维护。脚本要做到一条命令能更新到所有相关的结构化内容，手工维护可能会遗漏
 - **Task Pack 是执行入口**：所有 sub-agent 必须基于 task pack 派发
+- **上下文恢复**：当新开会话/上下文窗口重置时，进度文件+git 历史=完全恢复
 
 ## 架构
 
@@ -36,20 +37,20 @@ Agentic Codex Workflow 是一套面向 AI Coding Agent（如 Claude Code、OpenA
 
 ## Skills 模块
 
-| Skill | 用途 |
-|-------|------|
-| `dev-workflow-router` | 任务总入口，判断 entropy、状态机位置、是否进入 multi-agent |
-| `dev-workflow-bootstrap` | 初始化或恢复 `.agentdocs/tasks/<task-id>/` 工作台 |
-| `dev-write-plan` | 起草和冻结实施计划 |
-| `dev-review-plan` | 计划评审 |
-| `dev-build-phase` | 实现阶段执行 |
-| `dev-close-review` | 交付前评审 |
-| `dev-final-review-and-archive` | 最终评审与归档 |
-| `dev-gh-create-issue` | GitHub Issue 创建 |
-| `dev-memory-router` | 记忆路由决策 |
-| `dev-structured-writeback` | 结构化写回（review/evidence/event） |
-| `dev-review-router` | 评审路由 |
-| `dev-agentdocs-check` | 工作台状态检查 |
+| Skill                          | 用途                                                       |
+| ------------------------------ | ---------------------------------------------------------- |
+| `dev-workflow-router`          | 任务总入口，判断 entropy、状态机位置、是否进入 multi-agent |
+| `dev-workflow-bootstrap`       | 初始化或恢复 `.agentdocs/tasks/<task-id>/` 工作台          |
+| `dev-write-plan`               | 起草和冻结实施计划                                         |
+| `dev-review-plan`              | 计划评审                                                   |
+| `dev-build-phase`              | 实现阶段执行                                               |
+| `dev-close-review`             | 交付前评审                                                 |
+| `dev-final-review-and-archive` | 最终评审与归档                                             |
+| `dev-gh-create-issue`          | GitHub Issue 创建                                          |
+| `dev-memory-router`            | 记忆路由决策                                               |
+| `dev-structured-writeback`     | 结构化写回（review/evidence/event）                        |
+| `dev-review-router`            | 评审路由                                                   |
+| `dev-agentdocs-check`          | 工作台状态检查                                             |
 
 ## High-Entropy 状态机
 
@@ -58,6 +59,7 @@ DISCUSS → ALIGN_PROOF → BOOTSTRAP → ISSUE_SYNC → PLAN_DRAFT → PLAN_REV
 ```
 
 **硬门禁：**
+
 - `ALIGN_PROOF` 未完成 → 禁止写 plan
 - `PLAN_REVIEW = PASS` 前 → 禁止进入 BUILD
 - `CLOSE_REVIEW = PASS` 前 → 禁止进入 ARCHIVE

@@ -92,7 +92,7 @@
 
 - `plan.md`：冻结后的规格真源（目标、范围、验收、契约、阶段拆分、回滚）
 - `workflow.md`：运行时状态真源（当前 state、phase 进度、review 结论、事件、归档结果）
-- `task-packs/*`：当前 phase 的最小派发包；只保存 digest 与 source pointers，不复制完整规格
+- `task-packs/*`：当前 phase 的派发包；只保存 digest 与 source pointers，不复制完整规格
 - `reviews/*.json`：独立技术评审结论真源
 - `evidence/*.json`：事实证据真源
 
@@ -184,14 +184,14 @@ High-Entropy 任务只能按这一条顺序推进：
 
 ## 4. 新会话与开工前对齐
 
-### 4.1 最小开工顺序
+### 4.1 开工顺序
 
 1. 读取项目级 `AGENTS.md`
 2. 读取 `.agentdocs/index.md`
 3. 定位唯一活动任务
 4. 恢复当前 phase 的 task pack
 5. 定向读取 pack 中列出的 deep refs
-6. 若要执行实现：补做最小 Git 检查
+6. 若要执行实现：补做 Git 检查
    - `git status --short --branch`
    - `git diff --stat`
    - `git diff --name-only`
@@ -294,7 +294,7 @@ Task pack 至少包含：
 
 说明：
 
-- 主 agent 的 spawn 指令只给最小流程骨架，不重写 specialist checklist
+- 主 agent 的 spawn 指令只给必要流程骨架，不重写 specialist checklist
 - 完整 checklist 由被委派角色自己加载 specialist skill
 
 ### 7.3 委派包必须包含
@@ -314,7 +314,7 @@ Task pack 至少包含：
 - **结构化写入优先**：review bundle / evidence / workflow event / archive manifest / index sync / delegation brief 优先用脚本完成
 - **自由手写仅用于语义内容本体**：例如 plan 正文、实现代码、分析结论
 - reviewer / explorer 可以 `workspace-write`，但只能写 task-scoped 工件或结构化产物，不直接改业务代码
-- reviewer 的 `Required Changes / Required Follow-ups` 必须是最小修改闭包，不得写成替代性完整 plan、替代性实现方案或替代性路由方案
+- reviewer 的 `Required Changes / Required Follow-ups` 必须是必要修改闭包，不得写成替代性完整 plan、替代性实现方案或替代性路由方案
 
 ### 7.5 并行 writer 规则
 
@@ -360,7 +360,7 @@ python .codex/workflow/taskctl.py <subcommand>
 - controller 产出的结构文件必须可审阅、可追踪、可供后续可视化读取
 - review / evidence / archive manifest 这类结构化工件默认以 JSON 为唯一持久化格式
 - 能被路径、字段、存在性、枚举值、状态机与引用类型稳定判定的问题，应优先进入 controller / canonical preflight，而不是交给 reviewer 肉眼兜底
-- 若 controller 失败，主 agent 只能报告失败与最小恢复动作，不得悄悄手改让结果“看起来通过”
+- 若 controller 失败，主 agent 只能报告失败与恢复动作，不得悄悄手改让结果“看起来通过”
 
 ---
 

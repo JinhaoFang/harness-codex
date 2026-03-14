@@ -1,13 +1,13 @@
 # Realtime E4 Acceptance and Regression Pack (2026-03-12)
 
-> 目的：把 `realtime/livekit` 本轮 closeout 还剩的 `E4` 验收与最小回归从“分散 TODO”收束成一个可直接执行、可复核的包。  
+> 目的：把 `realtime/livekit` 本轮 closeout 还剩的 `E4` 验收与回归从“分散 TODO”收束成一个可直接执行、可复核的包。  
 > 事实判断以代码 / 测试 / 配置为准；本文件只负责把 closeout 所需的验证路径写清楚。
 
 ## 0) 范围冻结
 
 - 本文件只覆盖 3 类 closeout 尾项：
   1. `E4` 手动验收
-  2. 最小自动化回归范围
+  2. 自动化回归范围
   3. Jaeger 结构验证与 remaining manual UAT 义务
 - 不在本文件内扩展：
   - `WS realtime TTS`
@@ -25,7 +25,7 @@
 - voice/text thinking 分流：`services/agentscope_runtime/agent/factory.py`
 - RTC token 契约：`src/app/api/v1/rtc.py`、`src/app/core/rtc.py`
 
-## 2) 最小自动化回归范围
+## 2) 自动化回归范围
 
 ### 2.1 统一命令
 
@@ -36,17 +36,17 @@
 
 ### 2.2 场景覆盖矩阵
 
-| 场景 | 自动化锚点 |
-|---|---|
-| false interruption 的 pause / confirm / resume / cooldown | `tests/services/livekit_agent/core/test_interruption_gate.py` |
-| `/internal/responses` 401 刷新、409 `Retry-After`、5xx/断流首输出前有限重试、interrupt 5xx/网络错误重试、W3C headers 注入 | `tests/services/livekit_agent/adapters/test_fastapi_internal_client.py` |
-| `lk.transcription` 文本可见性契约 | `tests/services/livekit_agent/adapters/test_livekit_text_stream.py` |
-| stop/turn gate 后不续播历史文本、TTS pipeline 取消治理 | `tests/services/livekit_agent/pipelines/test_realtime_text_to_speech.py` |
-| 文本切片规则（chunker v2） | `tests/services/livekit_agent/core/test_text_chunker.py` |
-| utterance/VAD 基础行为 | `tests/services/livekit_agent/core/test_voice_activity.py` |
-| ASR OpenAI-compatible 适配行为 | `tests/services/livekit_agent/adapters/test_dashscope_asr.py` |
-| voice/text thinking 分流 | `tests/services/agentscope_runtime/test_voice_mode_prompt.py` |
-| RTC token 契约（identity=`user_id`、room=`session_id`） | `tests/api/v1/test_rtc_token.py` |
+| 场景                                                                                                                      | 自动化锚点                                                               |
+| ------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| false interruption 的 pause / confirm / resume / cooldown                                                                 | `tests/services/livekit_agent/core/test_interruption_gate.py`            |
+| `/internal/responses` 401 刷新、409 `Retry-After`、5xx/断流首输出前有限重试、interrupt 5xx/网络错误重试、W3C headers 注入 | `tests/services/livekit_agent/adapters/test_fastapi_internal_client.py`  |
+| `lk.transcription` 文本可见性契约                                                                                         | `tests/services/livekit_agent/adapters/test_livekit_text_stream.py`      |
+| stop/turn gate 后不续播历史文本、TTS pipeline 取消治理                                                                    | `tests/services/livekit_agent/pipelines/test_realtime_text_to_speech.py` |
+| 文本切片规则（chunker v2）                                                                                                | `tests/services/livekit_agent/core/test_text_chunker.py`                 |
+| utterance/VAD 基础行为                                                                                                    | `tests/services/livekit_agent/core/test_voice_activity.py`               |
+| ASR OpenAI-compatible 适配行为                                                                                            | `tests/services/livekit_agent/adapters/test_dashscope_asr.py`            |
+| voice/text thinking 分流                                                                                                  | `tests/services/agentscope_runtime/test_voice_mode_prompt.py`            |
+| RTC token 契约（identity=`user_id`、room=`session_id`）                                                                   | `tests/api/v1/test_rtc_token.py`                                         |
 
 ### 2.3 自动化未直接覆盖的风险
 
@@ -66,6 +66,7 @@
 ### 3.2 Checklist
 
 1. **Join / 首轮播报**
+
    - 获取 `/api/v1/rtc/token`，以 `identity=user_id`、`room=session_id` 加入房间。
    - 触发一次语音请求或 bootstrap 文本请求。
    - 通过标准：
@@ -74,6 +75,7 @@
      - livekit-agent 未绕过 FastAPI，日志/trace 中可见 `/internal/responses`。
 
 2. **真实打断（confirm）**
+
    - 在 assistant 已经开始播报后，连续说话超过 `confirm_speech_ms`。
    - 通过标准：
      - 当前播报尽快静音；
@@ -81,6 +83,7 @@
      - 后续由新的用户输入触发新的 request / 回答。
 
 3. **误打断恢复（resume）**
+
    - 在 assistant 已经开始播报后，制造一次短噪声/咳嗽/极短语音，持续时间明显短于 `confirm_speech_ms`，随后保持静音直到超过 `cancel_silence_ms`。
    - 通过标准：
      - 播报会短暂停顿后恢复同一 turn；
@@ -88,6 +91,7 @@
      - 不会把短噪声残留成新的 transcript / 新请求。
 
 4. **断连 / 重连 cleanup**
+
    - 在 assistant 播报期间执行下列任一操作：
      - 当前客户端主动断开；
      - 同一 `identity=user_id` 的新客户端重新加入房间（触发 sid 变化）。

@@ -79,15 +79,15 @@
 
 #### 5.4 Realtime / Voice / Responses 运行时坑点
 
-- livekit-agent Phase E2 最小闭环需要同时验证：OTel 初始化 + W3C 传播、S2S JWT 缓存/续期、`/internal/responses` SSE 解析、文本增量转 TTS publish；debug 可用 `LIVEKIT_AGENT_BOOTSTRAP_USER_TEXT`。
-- livekit-agent Phase E3 最小闭环：远端音频帧 -> 轻量 VAD/utterance -> DashScope ASR -> `/internal/responses` -> TTS publish；用户说话开始时触发“本地取消 + `POST /internal/system/responses/interrupt`”；TTS 请求必须支持外部注入 `request_id` 以精确打断。
+- livekit-agent Phase E2 闭环需要同时验证：OTel 初始化 + W3C 传播、S2S JWT 缓存/续期、`/internal/responses` SSE 解析、文本增量转 TTS publish；debug 可用 `LIVEKIT_AGENT_BOOTSTRAP_USER_TEXT`。
+- livekit-agent Phase E3 闭环：远端音频帧 -> 轻量 VAD/utterance -> DashScope ASR -> `/internal/responses` -> TTS publish；用户说话开始时触发“本地取消 + `POST /internal/system/responses/interrupt`”；TTS 请求必须支持外部注入 `request_id` 以精确打断。
 - Agent 看图（Phase 1）：FastAPI 提供 `/internal/media/files/{file_id}/download-url`；runtime builtin 工具 `view_image` 支持 `index/file_id/image_url` 三选一；`image_url` 必须做域名 allowlist。
 - tool output 不进入 OpenAI Responses SSE output items；如需观测，仅在 debug-only 通过 `astraflow.debug.tool_output` chunk 输出，且不进入 `response.completed`/DB。
 - Responses Proxy 幂等与 completed 回放：
   - `Idempotency-Key` 必填；`metadata.request_id` 默认等同 `Idempotency-Key`
   - `X-Request-Id` / `metadata.attempt_request_id` 只用于监控
   - `in_progress` 返回 `409 + Retry-After: 1`
-  - completed 回放必须合成最小 Responses SSE 事件流，不能只回放单个 `response.completed`
+  - completed 回放必须合成 Responses SSE 事件流，不能只回放单个 `response.completed`
   - completed 侦测要同时兼容 `event: response.completed` 与 `data.type == "response.completed"`
 - agentscope-runtime `v1.0.4` Responses SSE 已知坑：tool_use 被标记为 `plugin_call` 并在 Responses 适配层丢弃；reasoning 的 `output_index` 可能错位；`function_call` 的 `output_item.added.item.id` 可能缺失。
 - SSE message 文本收口坑：若 upstream completed TextContent 缺少 `msg_id/index`，ResponsesAdapter 会丢弃该事件并缺失 `response.output_text.done` / `response.content_part.done`；需要在 `message.completed()` 前补齐 `message.content_completed(...)`。

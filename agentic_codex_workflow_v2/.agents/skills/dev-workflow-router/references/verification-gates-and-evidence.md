@@ -1,13 +1,16 @@
 # 验证门禁与证据规范（Python / Node）
 
 ## 1) 通用规则
-- Gate = 必须通过的最小验证集合；未满足 Gate 不得宣布完成
+
+- Gate = 必须通过的验证集合；未满足 Gate 不得宣布完成
 - Gate 命令应来自项目约定（scripts / Makefile / CI 入口），不要临时猜命令
 - Evidence Ref 必须指向 `.agentdocs/tasks/<task-id>/evidence/` 下的真实 bundle
 - 仅写“pytest -q”或“reviewer PASS”不再算有效证据
 
 ## 2) Evidence Bundle 最低字段
+
 每条 evidence 至少包含：
+
 - `evidence_id`
 - `phase`
 - `purpose`
@@ -21,25 +24,32 @@
 - `notes`
 
 ## 3) 降级协议（DEGRADED）
+
 无法执行标准 Gate 时，必须额外记录：
+
 - `why`
 - `instead`
 - `to_run_later`
 
 ## 4) Python 建议 Gate
+
 - Format：`uv run ruff format .`
 - Lint：`uv run ruff check .`
 - Test：`uv run pytest -q`
 
 ## 5) Node 建议 Gate
+
 按 lockfile 决定包管理器；以 root scripts 为唯一真相：
+
 - lint
 - typecheck（如有）
 - test
 - build（如改动影响构建时）
 
 ## 6) 行为类 / 文档类任务
+
 当任务不适合自动化测试时，至少提供：
+
 - checklist
 - 独立 reviewer 结论
 - 产物路径
@@ -56,5 +66,6 @@ python .agents/skills/dev-agentdocs-check/scripts/agentdocs_check.py \
 ```
 
 这个 preflight 的作用是：
+
 - 把“build-before-review / evidence ref 不可追溯 / index DEFAULT 多重冲突 / plan 路径缺失”等硬问题提前暴露
 - 让 reviewer 把精力放在语义质量（scope/contract/risk/验证设计）上

@@ -1,7 +1,7 @@
 services/livekit_agent/adapters/dashscope_asr.py:128:            from openai import AsyncOpenAI
 services/livekit_agent/adapters/dashscope_asr.py:142:            client = AsyncOpenAI(
 .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-e4-acceptance-and-regression-pack-2026-03-12.md:1:# Realtime E4 Acceptance and Regression Pack (2026-03-12)
-.agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-e4-acceptance-and-regression-pack-2026-03-12.md:3:> 目的：把 `realtime/livekit` 本轮 closeout 还剩的 `E4` 验收与最小回归从“分散 TODO”收束成一个可直接执行、可复核的包。  
+.agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-e4-acceptance-and-regression-pack-2026-03-12.md:3:> 目的：把 `realtime/livekit` 本轮 closeout 还剩的 `E4` 验收与回归从“分散 TODO”收束成一个可直接执行、可复核的包。  
 .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-e4-acceptance-and-regression-pack-2026-03-12.md:9:  1. `E4` 手动验收
 .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-e4-acceptance-and-regression-pack-2026-03-12.md:11:  3. Jaeger 结构验证与 remaining manual UAT 义务
 .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-e4-acceptance-and-regression-pack-2026-03-12.md:21:- false interruption resume / cooldown：`services/livekit_agent/core/interruption_gate.py`
@@ -21,7 +21,7 @@ services/livekit_agent/adapters/dashscope_asr.py:142:            client = AsyncO
 .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md:66:- `.agentdocs/workflow/2602121821-livekit-agent-e3-hardening-tracing-task.md` 仍保留 “Jaeger 结构验证” 未完成。
 .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md:70:- 代码中存在 `from openai import AsyncOpenAI`：`services/livekit_agent/adapters/dashscope_asr.py`
 .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md:79:  - 仍把 `false interruption resume` 写为未完成
-.agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md:81:  - 仍把 E4 验收与最小自动化列为未完成
+.agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md:81:  - 仍把 E4 验收与自动化列为未完成
 .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md:85:- `services/livekit_agent/README.md` 仍写“未覆盖 false interruption resume”，与代码事实不符。
 .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md:89:- `.agentdocs/workflow/2602131414-realtime-e3-enhancements-voice-mode-e4-task.md` 的分析区仍写 `false interruption resume 当前未见实现`，但 TODO/代码已被后续任务覆盖。
 .agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-closeout-sync-snapshot-2026-03-12.md:94:  1. `E4` 验收闭环
@@ -44,7 +44,7 @@ services/livekit_agent/adapters/dashscope_asr.py:142:            client = AsyncO
 .agentdocs/workflow/2602131031-realtime-livekit-fix-execution-task.md:58:- assistant 回复文本：`lk.transcription` TextStream delta 流式可见。
 .agentdocs/workflow/2602131031-realtime-livekit-fix-execution-task.md:59:- user transcript：`lk.transcription` TextStream 终态可见（sender_identity=user_id，含 track_id）。
 .agentdocs/workflow/2602131031-realtime-livekit-fix-execution-task.md:63:- 不再使用 `send_text(topic=lk.transcription)` 伪装 TextStream。
-.agentdocs/workflow/2602131031-realtime-livekit-fix-execution-task.md:100:- worker_entrypoint 引入最小状态机（active turn + cancel barrier），并实现 sid 变化触发 cleanup；assistant/user 文本改为 `lk.transcription` TextStream：`services/livekit_agent/app/worker_entrypoint.py`
+.agentdocs/workflow/2602131031-realtime-livekit-fix-execution-task.md:100:- worker_entrypoint 引入状态机（active turn + cancel barrier），并实现 sid 变化触发 cleanup；assistant/user 文本改为 `lk.transcription` TextStream：`services/livekit_agent/app/worker_entrypoint.py`
 .agentdocs/workflow/2602121821-livekit-agent-e3-hardening-tracing-task.md:17:2. 高频打断联调中出现 `POST /internal/responses -> 409 Session in progress`，现有 livekit-agent 未按 `Retry-After` 重试，导致该轮直接失败（在 `2602121830` 文档中已记录）。
 .agentdocs/workflow/2602121821-livekit-agent-e3-hardening-tracing-task.md:24:- [x] `/internal/responses` 409（含 `Retry-After`）具备有限重试能力，避免高频打断下的“必现失败”。
 .agentdocs/workflow/2602121821-livekit-agent-e3-hardening-tracing-task.md:27:- [x] Jaeger tracing 补齐：新增关键阶段 spans（ASR / internal_responses / TTS / interrupt），并保留 `astraflow.first_audio_latency_ms` 指标字段。
@@ -60,20 +60,20 @@ services/livekit_agent/adapters/dashscope_asr.py:142:            client = AsyncO
 .agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:5:> 范围：FastAPI（Control Plane）+ agentscope-runtime（Data Plane）+ **livekit-agent（Realtime Plane，Phase E2/E3 闭环与 E3 hardening 已落地；当前仅余 E4 closeout）** + LiveKit Server（self-host）
 .agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:70:  - `astraflow.first_audio_latency_ms`：`t_first_audio - t_first_text_delta`（验收硬指标 `<=200ms`）。
 .agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:71:  - `astraflow.e2e_first_audio_latency_ms`：`t_first_audio - t_utterance_final`（建议 `<=600ms`）。
-.agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:74:> 注意（现状，已按 2026-03-12 代码/测试事实回填）：截至 2026-02-13，livekit-agent 已落地 Phase E2「四闭环」+ Phase E3「最小闭环」+ 后续 hardening（VAD/utterance、非实时 ASR、用户说话打断 interrupt、false interruption resume、首输出前有限重试、interrupt 5xx/网络错误重试）。当前真实剩余项仅为 E4 验收与回归收口，活跃 closeout SoT 见 `.agentdocs/archive/260312-realtime-livekit-closeout/workflow.md`。
-.agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:123:4. ⏳ 当前真实剩余项仅为 E4 closeout（手动验收、最小自动化回归、Jaeger 结构验证）；`false interruption resume` 与异常治理已由后续任务补齐。
-.agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:130:4. ⏳ Phase E4 closeout 进行中：端到端验收文档与最小自动化回归正在收束到 `.agentdocs/archive/260312-realtime-livekit-closeout/`。
+.agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:74:> 注意（现状，已按 2026-03-12 代码/测试事实回填）：截至 2026-02-13，livekit-agent 已落地 Phase E2「四闭环」+ Phase E3「闭环」+ 后续 hardening（VAD/utterance、非实时 ASR、用户说话打断 interrupt、false interruption resume、首输出前有限重试、interrupt 5xx/网络错误重试）。当前真实剩余项仅为 E4 验收与回归收口，活跃 closeout SoT 见 `.agentdocs/archive/260312-realtime-livekit-closeout/workflow.md`。
+.agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:123:4. ⏳ 当前真实剩余项仅为 E4 closeout（手动验收、自动化回归、Jaeger 结构验证）；`false interruption resume` 与异常治理已由后续任务补齐。
+.agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:130:4. ⏳ Phase E4 closeout 进行中：端到端验收文档与自动化回归正在收束到 `.agentdocs/archive/260312-realtime-livekit-closeout/`。
 .agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:505:    - ✅ 已落地：`astraflow.first_audio_latency_ms = t_first_audio - t_first_text_delta`；
 .agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:511:- [x] 误打断兜底：短暂 pause + 无新输入则恢复（false interruption resume），避免 VAD 抖动导致体验劣化
 .agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:512:- [x] 异常治理：S2S token 过期自动刷新、FastAPI 409/5xx/断流分策略重试、interrupt 5xx/网络错误有限重试
 .agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:514:### Phase E4：验收与回归
-.agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:539:- 2026-02-12：为 playground 真实联调补齐最小“文本可见性”：assistant 文本增量通过 `lk.transcription` 发布、完整文本通过 `lk.chat` 发布（不改变语音主链路）。
+.agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:539:- 2026-02-12：为 playground 真实联调补齐“文本可见性”：assistant 文本增量通过 `lk.transcription` 发布、完整文本通过 `lk.chat` 发布（不改变语音主链路）。
 .agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:540:- 2026-02-12：文档状态同步：对齐 E3 已落地与 409 `Retry-After` 重试已实现事实；复核质量门槛 `ruff format --check`、`ruff check`、`ASTRAFLOW_TEST_USE_UVLOOP=1 pytest -q tests/services/livekit_agent`，结果 `28 passed, 1 warning`。
 .agentdocs/workflow/2602102130-realtime-livekit-agent-task.md:541:- 2026-03-12：closeout 回填：对齐 `false interruption resume`、5xx/断流重试、interrupt 重试与 E4 收尾状态；当前活跃收尾 SoT/验收包见 `.agentdocs/archive/260312-realtime-livekit-closeout/`。
 services/livekit_agent/app/worker_entrypoint.py:11:  - TextStream：将 user transcript 与 assistant delta 发布到 `lk.transcription`（Playground 可见）
 services/livekit_agent/app/worker_entrypoint.py:401:        """将用户转录（终态）发布到 `lk.transcription` TextStream（sender_identity=user_id）。"""
 services/livekit_agent/README.md:12:- 已实现 false interruption resume：候选打断先 pause，确认真实语音后再 interrupt；误触发则恢复当前播报；
-services/livekit_agent/README.md:13:- 当前收尾项仅剩 `E4` 手动验收与最小回归固化：`.agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-e4-acceptance-and-regression-pack-2026-03-12.md`
+services/livekit_agent/README.md:13:- 当前收尾项仅剩 `E4` 手动验收与回归固化：`.agentdocs/archive/260312-realtime-livekit-closeout/findings/realtime-e4-acceptance-and-regression-pack-2026-03-12.md`
 services/livekit_agent/README.md:44:- 选择 `service=astraflow-livekit-agent` 查看 utterance spans（`astraflow.first_audio_latency_ms` 为关键指标字段）
 services/livekit_agent/pyproject.toml:17:    "openai>=1.0.0",
 tests/services/livekit_agent/adapters/test_fastapi_internal_client.py:230:            _FakeResponse(409, headers={"Retry-After": "1"}, body_bytes=b"session in progress"),

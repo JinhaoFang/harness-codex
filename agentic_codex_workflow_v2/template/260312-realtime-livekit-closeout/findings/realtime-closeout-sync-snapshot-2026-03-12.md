@@ -42,7 +42,7 @@
 
 - `/internal/responses` 首输出前有限重试：`services/livekit_agent/adapters/fastapi_internal_client.py`
 - `/internal/system/responses/interrupt` 网络错误/5xx 有限重试：`services/livekit_agent/adapters/fastapi_internal_client.py`
-- ASR/TTS 最小超时：`services/livekit_agent/adapters/dashscope_asr.py`、`services/livekit_agent/adapters/dashscope_tts.py`
+- ASR/TTS 超时：`services/livekit_agent/adapters/dashscope_asr.py`、`services/livekit_agent/adapters/dashscope_tts.py`
 - voice/text thinking 分流：`services/agentscope_runtime/agent/factory.py`
 - 测试：`tests/services/agentscope_runtime/test_voice_mode_prompt.py`
 
@@ -56,9 +56,9 @@
   - `lk.transcription` 是否可见
   - Jaeger 中的关键 span / attributes 是否可见
 
-### 2.2 最小自动化回归范围仍未统一
+### 2.2 自动化回归范围仍未统一
 
-- 文档多处提到“补齐最小自动化”，但当前还没有一个 closeout 级别的统一回归清单。
+- 文档多处提到“补齐自动化”，但当前还没有一个 closeout 级别的统一回归清单。
 - 现有服务测试覆盖了 gate / TextStream / Retry-After / voice-mode 等，但未见直接覆盖 `disconnect cleanup / connection_generation` 的明确测试锚点。
 
 ### 2.3 Jaeger 结构验证仍未回填
@@ -78,7 +78,7 @@
 - `.agentdocs/workflow/2602102130-realtime-livekit-agent-task.md`
   - 仍把 `false interruption resume` 写为未完成
   - 仍把 5xx/断流治理写为待补齐
-  - 仍把 E4 验收与最小自动化列为未完成
+  - 仍把 E4 验收与自动化列为未完成
 
 ### 3.2 README 漂移
 
