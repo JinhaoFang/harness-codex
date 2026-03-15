@@ -3,7 +3,7 @@ name: dev-build-phase
 description: |
   面向 worker 的 BUILD specialist skill。
   Use when the current task already passed PLAN_REVIEW, a BUILD task pack exists,
-  and Codex needs to execute exactly one implementation phase with minimal change and traceable evidence.
+  and needs to execute exactly one implementation phase with minimal change and traceable evidence.
 ---
 
 # Dev Build Phase

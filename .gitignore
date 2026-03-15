@@ -13,3 +13,6 @@ __pycache__/
 # OS
 .DS_Store
 Thumbs.db
+
+# Embedded git repos (harness)
+agentic_codex_workflow_v2/docs/references/skills/

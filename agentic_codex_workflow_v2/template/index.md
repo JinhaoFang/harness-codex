@@ -25,6 +25,7 @@
 - 看当前 scratch：从当前 task root 下的 `scratch/` 进入
 
 ## 2) 当前任务（SSOT）
+
 <!-- DEFAULT = 新会话默认先读的 workflow；同一时间应尽量只有一个 DEFAULT -->
 <!-- ACTIVE = 并行任务，仅在明确允许并行时保留 -->
 <!-- NONE -->
@@ -51,7 +52,7 @@
   - 产品/运行时经验：`.agentdocs/insights.md` 的“旧 index 全局记忆迁移（2026-03-12）”
   - 架构事实：直接读取现有 `architecture/*.md`
   - 操作提示：继续保留在本索引
-- 如涉及 Electric / AgentScope / LiveKit / fastapi-boilerplate，请按仓库技能目录进一步阅读对应 `.codex/skills/*/SKILL.md`
+- 如涉及 Electric / AgentScope / LiveKit / fastapi-boilerplate，请按仓库技能目录进一步阅读对应 `.agents/skills/*/SKILL.md`
 - Git 推送前必须运行 `/skill pre-push-check`
 
 ## 5) Archive 与 Legacy 导航

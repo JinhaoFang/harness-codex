@@ -94,7 +94,7 @@ python .agents/skills/dev-agentdocs-check/scripts/evidence_run.py   --workflow .
 若使用 controller 直接写 evidence：
 
 ```bash
-python .codex/workflow/taskctl.py record-evidence \
+python .agents/workflow/taskctl.py record-evidence \
   --task-root .agentdocs/tasks/<task-id> \
   --workflow .agentdocs/tasks/<task-id>/workflow.md \
   --evidence-id E01-P1-smoke \

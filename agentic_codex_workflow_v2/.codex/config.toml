@@ -1,4 +1,4 @@
-# Project-level Codex configuration for the Agentic Codex workflow (V2 systemized).
+# Project-level configuration for the Agentic workflow (V2 systemized).
 # Goals:
 # - policy / orchestration / capability / state / controller separation
 # - review router + specialist reviewers

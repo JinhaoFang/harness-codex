@@ -108,7 +108,7 @@ def ensure_json(path: Path, payload: dict) -> None:
 
 
 def load_template(root: Path, name: str) -> str:
-    return (root / ".codex" / "workflow" / "templates" / name).read_text(encoding="utf-8")
+    return (root / ".agents" / "workflow" / "templates" / name).read_text(encoding="utf-8")
 
 
 def repo_root_from_path(path: Path) -> Path:
@@ -1231,7 +1231,7 @@ def cmd_lint_skills(args):
 
 
 def build_parser():
-    p = argparse.ArgumentParser(description="Deterministic controller for agentic_codex_workflow V2")
+    p = argparse.ArgumentParser(description="Deterministic controller for agentic_workflow V2")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     x = sub.add_parser("check-transition")

@@ -2,7 +2,7 @@
 name: dev-review-router
 description: |
   review gate 路由器，用于让 main agent 在当前状态下选择正确的 reviewer 角色、specialist skill 与 review mode。
-  Use when a task is about to enter PLAN_REVIEW or CLOSE_REVIEW, or when Codex must reroute after review findings,
+  Use when a task is about to enter PLAN_REVIEW or CLOSE_REVIEW, or when must reroute after review findings,
   while keeping the main agent out of the full reviewer checklists.
 ---
 

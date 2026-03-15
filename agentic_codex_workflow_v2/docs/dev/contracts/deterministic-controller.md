@@ -5,7 +5,7 @@
 ## 1. 统一入口
 
 ```bash
-python .codex/workflow/taskctl.py <subcommand>
+python .agents/workflow/taskctl.py <subcommand>
 ```
 
 ## 2. 推荐 subcommands

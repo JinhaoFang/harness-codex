@@ -88,8 +88,8 @@
 推荐由 controller 生成与校验：
 
 ```bash
-python .codex/workflow/taskctl.py make-pack ...
-python .codex/workflow/taskctl.py validate-pack --pack <path>
+python .agents/workflow/taskctl.py make-pack ...
+python .agents/workflow/taskctl.py validate-pack --pack <path>
 ```
 
 原则：

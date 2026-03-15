@@ -142,7 +142,7 @@ def create_workflow(root: Path, title: str, issue: str) -> Tuple[Path, str, str]
     slug = kebab(title)
     cmd = [
         "python",
-        str(root / ".codex" / "workflow" / "taskctl.py"),
+        str(root / ".agents" / "workflow" / "taskctl.py"),
         "create-task",
         "--root",
         str(root),
