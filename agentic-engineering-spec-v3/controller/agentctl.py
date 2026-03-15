@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 TZ = timezone(timedelta(hours=8))
+PLACEHOLDER_VALUES = {"<task-id>", "<task-title>", "<updated-at>", "<subtask-id>", "<subtask-id-or-na>", "<title>", "..."}
 
 
 def now_str() -> str:
@@ -90,6 +91,125 @@ def replace_bullet_value(lines: list[str], bullet_label: str, value: str) -> lis
     if not replaced:
         raise SystemExit(f"BLOCK: workflow missing bullet '- {bullet_label}:'")
     return out
+
+
+def is_placeholder(value: str) -> bool:
+    raw = value.strip()
+    if raw in PLACEHOLDER_VALUES:
+        return True
+    if raw.startswith("<") and raw.endswith(">"):
+        return True
+    return False
+
+
+def parse_frontmatter(text: str) -> dict[str, str]:
+    lines = text.splitlines()
+    if not (lines and lines[0].strip() == "---"):
+        raise SystemExit("BLOCK: missing frontmatter start ('---')")
+    out: dict[str, str] = {}
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if ":" not in line:
+            continue
+        key, value = line.split(":", 1)
+        out[key.strip()] = value.strip()
+    if not out:
+        raise SystemExit("BLOCK: empty frontmatter")
+    return out
+
+
+def section_slice(lines: list[str], heading: str) -> list[str]:
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip() == heading:
+            start = i + 1
+            break
+    if start is None:
+        return []
+    out: list[str] = []
+    for line in lines[start:]:
+        if line.startswith("## "):
+            break
+        out.append(line)
+    return out
+
+
+def bullets_to_map(lines: list[str]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for line in lines:
+        match = re.match(r"^\s*-\s*(?P<label>[^:]+)\s*:\s*(?P<value>.*)\s*$", line)
+        if not match:
+            continue
+        out[match.group("label").strip()] = match.group("value").strip()
+    return out
+
+
+def find_subtask_block(plan_lines: list[str], subtask_id: str) -> list[str]:
+    subtasks = section_slice(plan_lines, "## Subtasks")
+    if not subtasks:
+        return []
+    header_re = re.compile(r"^###\s+(?P<id>[^\s—-]+)\s*(?:—|-)\s*(?P<title>.+?)\s*$")
+
+    blocks: dict[str, list[str]] = {}
+    current_id: str | None = None
+    for line in subtasks:
+        if line.startswith("### "):
+            m = header_re.match(line.strip())
+            current_id = (m.group("id") if m else line.strip().split(maxsplit=1)[0].removeprefix("###")).strip()
+            blocks[current_id] = []
+            continue
+        if current_id is not None:
+            blocks[current_id].append(line)
+    return blocks.get(subtask_id, [])
+
+
+def rewrite_agentdocs_prefix(text: str, *, src_prefix: str, dst_prefix: str) -> str:
+    return text.replace(src_prefix, dst_prefix)
+
+
+def remove_index_task_entries(index_text: str, task_id: str) -> str:
+    lines = index_text.splitlines()
+    kept: list[str] = []
+    for line in lines:
+        if re.match(rf"^\s*-\s*{re.escape(task_id)}\s+—\s+", line):
+            continue
+        kept.append(line)
+    return "\n".join(kept).rstrip() + "\n"
+
+
+def sync_indexes(repo_root: Path) -> None:
+    index_path, archive_index_path = ensure_agentdocs(repo_root)
+
+    tasks: list[tuple[str, str]] = []
+    for wf in sorted(tasks_root(repo_root).glob("*/workflow.md")):
+        text = wf.read_text(encoding="utf-8")
+        title = parse_frontmatter(text).get("title", "<task-title>")
+        task_id = wf.parent.name
+        tasks.append((task_id, title))
+
+    archived: list[tuple[str, str]] = []
+    for wf in sorted(archive_root(repo_root).glob("*/workflow.md")):
+        text = wf.read_text(encoding="utf-8")
+        title = parse_frontmatter(text).get("title", "<task-title>")
+        task_id = wf.parent.name
+        archived.append((task_id, title))
+
+    active_lines = minimal_index_text().splitlines()
+    insert_at = active_lines.index("<!-- - <task-id> — <title> — .agentdocs/tasks/<task-id>/workflow.md -->") + 1
+    active_entries = [f"- {tid} — {title} — .agentdocs/tasks/{tid}/workflow.md" for tid, title in tasks]
+    active_lines[insert_at:insert_at] = active_entries
+    if tasks:
+        active_lines = [line for line in active_lines if line.strip() != "<!-- NONE -->"]
+    ensure_text(index_path, "\n".join(active_lines) + "\n")
+
+    archive_lines = minimal_archive_index_text().splitlines()
+    insert_at = archive_lines.index("<!-- - <task-id> — <title> — .agentdocs/archive/<task-id>/workflow.md -->") + 1
+    archive_entries = [f"- {tid} — {title} — .agentdocs/archive/{tid}/workflow.md" for tid, title in archived]
+    archive_lines[insert_at:insert_at] = archive_entries
+    if archived:
+        archive_lines = [line for line in archive_lines if line.strip() != "<!-- NONE -->"]
+    ensure_text(archive_index_path, "\n".join(archive_lines) + "\n")
 
 
 def update_frontmatter_field(text: str, field: str, value: str) -> str:
@@ -401,6 +521,20 @@ def cmd_refresh_pack(args: argparse.Namespace) -> None:
     workflow_ref = args.workflow_ref or f".agentdocs/tasks/{task_id}/workflow.md"
     out = Path(args.out) if args.out else (paths.packs_dir / f"{subtask_id}.md")
 
+    plan_path = repo_root / plan_ref
+    workflow_path = repo_root / workflow_ref
+    plan_lines = plan_path.read_text(encoding="utf-8").splitlines() if plan_path.exists() else []
+
+    plan_goal = bullets_to_map(section_slice(plan_lines, "## Goal"))
+    plan_acceptance = bullets_to_map(section_slice(plan_lines, "## Acceptance"))
+    plan_boundaries = bullets_to_map(section_slice(plan_lines, "## Boundaries"))
+    plan_verification = bullets_to_map(section_slice(plan_lines, "## Verification"))
+    plan_anchors = bullets_to_map(section_slice(plan_lines, "## World-grounded anchors"))
+    plan_decision = bullets_to_map(section_slice(plan_lines, "## Decision freeze"))
+
+    subtask_block = find_subtask_block(plan_lines, subtask_id)
+    subtask_fields = bullets_to_map(subtask_block)
+
     template = load_template(template_root, "subtask-pack.md")
     lines = template.splitlines()
 
@@ -411,11 +545,36 @@ def cmd_refresh_pack(args: argparse.Namespace) -> None:
     set_field("Task ID", task_id)
     set_field("Subtask ID", subtask_id)
     set_field("Generated at", now_str())
-    set_field("Plan section", plan_ref)
+
+    # Objective
+    goal_value = subtask_fields.get("Goal") or plan_goal.get("Goal") or ""
+    acceptance_value = plan_acceptance.get("Success criteria") or ""
+    if subtask_fields.get("Verify"):
+        acceptance_value = f"{acceptance_value} (Verify: {subtask_fields.get('Verify')})".strip()
+    set_field("Goal", goal_value)
+    set_field("Acceptance for this subtask", acceptance_value)
+
+    # Boundaries
+    set_field("Write boundary", subtask_fields.get("Write boundary") or plan_boundaries.get("Write boundary") or "")
+    set_field("Forbidden zones", plan_boundaries.get("Forbidden zones") or "")
+    set_field("Invariants", plan_boundaries.get("Invariants") or "")
+
+    # References
+    set_field("Plan section", f"{plan_ref} (Subtasks/{subtask_id})")
     set_field("Workflow state", workflow_ref)
-    set_field("Required verification", "")
-    set_field("Reviewer focus", "")
-    set_field("Escalation triggers", "")
+    set_field("Relevant code paths", plan_anchors.get("Code paths") or "")
+    set_field("Existing tests", plan_anchors.get("Existing tests") or "")
+    set_field("Reusable mechanisms", plan_anchors.get("Reusable existing mechanisms") or "")
+
+    # Checks
+    required_verification = subtask_fields.get("Verify") or plan_verification.get("Required checks") or ""
+    reviewer_focus = subtask_fields.get("Review focus") or plan_verification.get("Reviewer recheck focus") or ""
+    escalation = plan_decision.get("Open questions requiring escalation") or ""
+    if args.evidence_refs:
+        required_verification = (required_verification + ("; " if required_verification else "") + "Evidence refs: " + ", ".join(args.evidence_refs)).strip()
+    set_field("Required verification", required_verification)
+    set_field("Reviewer focus", reviewer_focus)
+    set_field("Escalation triggers", escalation)
 
     if args.evidence_refs:
         # pack template does not have evidence field; keep in Checks section via "Required verification" for now.
@@ -444,8 +603,41 @@ def cmd_validate_refs(args: argparse.Namespace) -> None:
         if not required.exists():
             broken.append(f"missing {rel_path(repo_root, required)}")
 
+    if paths.plan.exists():
+        try:
+            fm = parse_frontmatter(paths.plan.read_text(encoding="utf-8"))
+            if fm.get("task_id") != task_id:
+                broken.append(f"plan frontmatter task_id mismatch: {fm.get('task_id')} (expected {task_id})")
+            if not fm.get("title") or is_placeholder(fm.get("title", "")):
+                broken.append("plan frontmatter title is placeholder/empty")
+        except SystemExit as e:
+            broken.append(f"plan frontmatter invalid: {e}")
+
     if paths.workflow.exists():
-        lines = load_workflow_lines(paths.workflow)
+        wf_text = paths.workflow.read_text(encoding="utf-8")
+        try:
+            wf_fm = parse_frontmatter(wf_text)
+            if wf_fm.get("task_id") != task_id:
+                broken.append(f"workflow frontmatter task_id mismatch: {wf_fm.get('task_id')} (expected {task_id})")
+        except SystemExit as e:
+            broken.append(f"workflow frontmatter invalid: {e}")
+
+        lines = wf_text.splitlines()
+        required_bullets = [
+            "Active subtask",
+            "Current gate",
+            "Allowed next action",
+            "Exception status",
+            "Plan review",
+            "Close review",
+            "Plan doc",
+            "Active subtask pack",
+        ]
+        for label in required_bullets:
+            value = find_bullet_value(lines, label)
+            if value is None:
+                broken.append(f"workflow missing bullet: {label}")
+
         for label in ["Plan doc", "Active subtask pack", "Latest evidence ref", "Latest plan review ref", "Latest close review ref"]:
             value = (find_bullet_value(lines, label) or "").strip()
             if not value:
@@ -453,9 +645,46 @@ def cmd_validate_refs(args: argparse.Namespace) -> None:
             if re.search(r"(^|/)task-packs(/|$)", value):
                 broken.append(f"forbidden legacy v2 task-packs ref in workflow: {label} -> {value}")
                 continue
+            if label in {"Latest evidence ref", "Latest plan review ref", "Latest close review ref"} and not value.endswith(".json"):
+                broken.append(f"workflow ref should be .json: {label} -> {value}")
+                continue
             ref_path = (repo_root / value).resolve() if not Path(value).is_absolute() else Path(value)
             if not ref_path.exists():
                 broken.append(f"broken ref in workflow: {label} -> {value}")
+            else:
+                # Minimal schema checks for referenced json
+                if label == "Latest evidence ref":
+                    try:
+                        payload = json.loads(ref_path.read_text(encoding="utf-8"))
+                        for k in ["task_id", "subtask", "kind", "result", "artifact_paths", "ran_at"]:
+                            if k not in payload:
+                                broken.append(f"evidence missing key {k}: {value}")
+                        if payload.get("task_id") != task_id:
+                            broken.append(f"evidence task_id mismatch: {value}")
+                    except Exception as e:
+                        broken.append(f"invalid evidence json: {value} ({e})")
+                if label in {"Latest plan review ref", "Latest close review ref"}:
+                    try:
+                        payload = json.loads(ref_path.read_text(encoding="utf-8"))
+                        for k in ["task_id", "subtask", "review_type", "decision", "fresh_context", "checked_against", "updated_at"]:
+                            if k not in payload:
+                                broken.append(f"review missing key {k}: {value}")
+                        if payload.get("task_id") != task_id:
+                            broken.append(f"review task_id mismatch: {value}")
+                    except Exception as e:
+                        broken.append(f"invalid review json: {value} ({e})")
+
+        # Validate pack matches workflow active subtask.
+        pack_ref = (find_bullet_value(lines, "Active subtask pack") or "").strip()
+        active_subtask = (find_bullet_value(lines, "Active subtask") or "").strip()
+        if pack_ref and active_subtask and (repo_root / pack_ref).exists():
+            pack_lines = (repo_root / pack_ref).read_text(encoding="utf-8").splitlines()
+            pack_task = (find_bullet_value(pack_lines, "Task ID") or "").strip()
+            pack_subtask = (find_bullet_value(pack_lines, "Subtask ID") or "").strip()
+            if pack_task and pack_task != task_id:
+                broken.append(f"pack task id mismatch: {pack_ref}")
+            if pack_subtask and pack_subtask != active_subtask:
+                broken.append(f"pack subtask id mismatch: {pack_ref} (expected {active_subtask})")
 
     if broken:
         print("FAIL: broken refs")
@@ -470,24 +699,63 @@ def cmd_check_gate(args: argparse.Namespace) -> None:
     repo_root = repo_root_from_arg(args.repo_root)
     task_id: str = args.task_id.strip()
     action: str = args.action
+    workflow_ref = args.workflow_ref
 
     paths = resolve_task_paths(repo_root, task_id, archived=False)
-    lines = load_workflow_lines(paths.workflow)
+    workflow_path = (repo_root / workflow_ref) if workflow_ref else paths.workflow
+    lines = load_workflow_lines(workflow_path)
+
     current_gate = (find_bullet_value(lines, "Current gate") or "").strip()
     plan_review = (find_bullet_value(lines, "Plan review") or "").strip()
     close_review = (find_bullet_value(lines, "Close review") or "").strip()
+    latest_evidence = (find_bullet_value(lines, "Latest evidence ref") or "").strip()
 
+    required_refs: list[str] = [rel_path(repo_root, paths.plan), rel_path(repo_root, workflow_path)]
     ok = True
     reasons: list[str] = []
 
-    if action == "implement":
+    if action == "plan-review":
+        if not paths.plan.exists():
+            ok = False
+            reasons.append("missing plan.md")
+        required_refs.append(rel_path(repo_root, paths.plan))
+    elif action == "implement":
+        required_refs.append((find_bullet_value(lines, "Active subtask pack") or "").strip())
         if plan_review != "PASS":
             ok = False
             reasons.append("requires Plan review = PASS")
-    if action == "archive":
+    elif action == "close-review":
+        if plan_review != "PASS":
+            ok = False
+            reasons.append("requires Plan review = PASS before close review")
+        if not latest_evidence and not list(paths.evidence_dir.glob("*.json")):
+            ok = False
+            reasons.append("requires at least one evidence json (latest evidence ref or evidence/*.json)")
+    elif action == "archive":
         if close_review != "PASS":
             ok = False
             reasons.append("requires Close review = PASS")
+
+    # validate-refs is a general preflight for all actions
+    try:
+        cmd_validate_refs(argparse.Namespace(repo_root=str(repo_root), task_id=task_id, archived=False))
+    except SystemExit as e:
+        ok = False
+        reasons.append(f"validate-refs failed (exit {e.code if hasattr(e, 'code') else 'nonzero'})")
+
+    result = {
+        "task_id": task_id,
+        "current_gate": current_gate or None,
+        "action": action,
+        "pass": ok,
+        "reasons": reasons,
+        "required_refs": [r for r in required_refs if r],
+    }
+    if getattr(args, "json", False):
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        if not ok:
+            raise SystemExit(2)
+        return
 
     print("gate:", current_gate or "<unknown>")
     print("action:", action)
@@ -517,6 +785,9 @@ def cmd_archive(args: argparse.Namespace) -> None:
     close_review = (find_bullet_value(lines, "Close review") or "").strip()
     if close_review != "PASS":
         raise SystemExit("BLOCK: archive requires Close review = PASS in workflow.md")
+    recovery_needed = (find_bullet_value(lines, "Recovery needed") or "NO").strip()
+    if recovery_needed not in {"NO", "No", "false", "FALSE"}:
+        raise SystemExit("BLOCK: archive requires Recovery needed = NO in workflow.md")
 
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists() and args.force:
@@ -526,12 +797,17 @@ def cmd_archive(args: argparse.Namespace) -> None:
     # Update workflow status in-place under archive.
     archived_paths = resolve_task_paths(repo_root, task_id, archived=True)
     wf_text = archived_paths.workflow.read_text(encoding="utf-8")
+    wf_text = rewrite_agentdocs_prefix(wf_text, src_prefix=f".agentdocs/tasks/{task_id}/", dst_prefix=f".agentdocs/archive/{task_id}/")
     wf_text = update_frontmatter_field(wf_text, "status", "archived")
     wf_text = update_frontmatter_field(wf_text, "updated_at", now_str())
     ensure_text(archived_paths.workflow, wf_text)
 
+    # Update derived indexes (remove from active, add to archive).
+    index_path, archive_index_path = ensure_agentdocs(repo_root)
+    ensure_text(index_path, remove_index_task_entries(index_path.read_text(encoding="utf-8"), task_id))
     archive_index_path = archive_root(repo_root) / "index.md"
     append_index_entry(archive_index_path, f"- {task_id} — {find_title_from_workflow(wf_text)} — .agentdocs/archive/{task_id}/workflow.md")
+    sync_indexes(repo_root)
 
     print("OK: archived task")
     print(f"- archived: {dst}")
@@ -560,9 +836,23 @@ def cmd_reopen(args: argparse.Namespace) -> None:
 
     paths = resolve_task_paths(repo_root, task_id, archived=False)
     wf_text = paths.workflow.read_text(encoding="utf-8")
+    wf_text = rewrite_agentdocs_prefix(wf_text, src_prefix=f".agentdocs/archive/{task_id}/", dst_prefix=f".agentdocs/tasks/{task_id}/")
     wf_text = update_frontmatter_field(wf_text, "status", "active")
     wf_text = update_frontmatter_field(wf_text, "updated_at", now_str())
+    # record reopen trigger into recovery section (best-effort)
+    wf_lines = wf_text.splitlines()
+    if args.trigger:
+        wf_lines = replace_bullet_value(wf_lines, "Recovery needed", "YES")
+        wf_lines = replace_bullet_value(wf_lines, "Trigger", args.trigger)
+        wf_lines = replace_bullet_value(wf_lines, "Exit condition", args.reason or "Re-evaluate next gate and clear recovery")
+        wf_text = "\n".join(wf_lines) + "\n"
     ensure_text(paths.workflow, wf_text)
+
+    # Update derived indexes.
+    index_path, archive_index_path = ensure_agentdocs(repo_root)
+    ensure_text(archive_index_path, remove_index_task_entries(archive_index_path.read_text(encoding="utf-8"), task_id))
+    append_index_entry(index_path, f"- {task_id} — {find_title_from_workflow(wf_text)} — .agentdocs/tasks/{task_id}/workflow.md")
+    sync_indexes(repo_root)
 
     print("OK: reopened task")
     print(f"- active: {dst}")
@@ -627,6 +917,8 @@ def build_parser() -> argparse.ArgumentParser:
     x = sub.add_parser("check-gate", help="Deterministically check whether a requested action is allowed")
     x.add_argument("--task-id", required=True)
     x.add_argument("--action", choices=["plan-review", "implement", "close-review", "archive"], required=True)
+    x.add_argument("--workflow-ref", default=None, help="Optional workflow ref to check instead of default")
+    x.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
     x.set_defaults(fn=cmd_check_gate)
 
     x = sub.add_parser("archive", help="Archive a task under .agentdocs/archive/<task-id>/ (requires close review PASS)")
@@ -636,8 +928,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     x = sub.add_parser("reopen", help="Reopen an archived task back under .agentdocs/tasks/<task-id>/")
     x.add_argument("--task-id", required=True)
+    x.add_argument("--trigger", default=None)
+    x.add_argument("--reason", default=None)
     x.add_argument("--force", action="store_true")
     x.set_defaults(fn=cmd_reopen)
+
+    x = sub.add_parser("sync-index", help="Regenerate derived .agentdocs index files from disk state")
+    x.set_defaults(fn=lambda a: (sync_indexes(repo_root_from_arg(a.repo_root)), print("OK: synced indexes")))
 
     return p
 
