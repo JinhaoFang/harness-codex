@@ -1,0 +1,21 @@
+{
+  "task_id": "<task-id>",
+  "subtask": "<subtask-id-or-na>",
+  "review_type": "plan",
+  "reviewer": "plan_reviewer",
+  "fresh_context": true,
+  "decision": "PASS|CHANGES_REQUIRED|REJECT",
+  "checked_against": {
+    "plan": "<path-to-plan>",
+    "world_anchors": ["<code-path>", "<test-path>"]
+  },
+  "findings": [
+    {
+      "type": "world_conflict|reuse_missed|boundary_gap|verification_gap|other",
+      "severity": "high|medium|low",
+      "summary": ""
+    }
+  ],
+  "required_changes": [""],
+  "updated_at": "<updated-at>"
+}
