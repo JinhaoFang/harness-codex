@@ -8,6 +8,7 @@ import shutil
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from uuid import uuid4
 
 TZ = timezone(timedelta(hours=8))
 PLACEHOLDER_VALUES = {"<task-id>", "<task-title>", "<updated-at>", "<subtask-id>", "<subtask-id-or-na>", "<title>", "..."}
@@ -29,8 +30,8 @@ def now_str() -> str:
     return datetime.now(TZ).strftime("%Y-%m-%d %H:%M %z")
 
 
-def now_compact() -> str:
-    return datetime.now(TZ).strftime("%Y%m%d-%H%M%S")
+def now_compact_precise() -> str:
+    return datetime.now(TZ).strftime("%Y%m%d-%H%M%S-%f")
 
 
 def ensure_text(path: Path, content: str) -> None:
@@ -40,6 +41,33 @@ def ensure_text(path: Path, content: str) -> None:
 
 def ensure_json(path: Path, payload: dict) -> None:
     ensure_text(path, json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+
+
+def sanitize_filename_part(value: str | None) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    if raw in PLACEHOLDER_VALUES:
+        return ""
+    if raw.startswith("<") and raw.endswith(">"):
+        return ""
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", raw).strip("-._")
+    return cleaned
+
+
+def write_unique_json(directory: Path, stem_parts: list[str], payload: dict) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    cleaned_parts = [sanitize_filename_part(part) for part in stem_parts]
+    stem = "-".join(part for part in cleaned_parts if part) or "artifact"
+    for _ in range(128):
+        out_path = directory / f"{now_compact_precise()}-{stem}-{uuid4().hex[:8]}.json"
+        try:
+            with out_path.open("x", encoding="utf-8") as fh:
+                fh.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+            return out_path
+        except FileExistsError:
+            continue
+    raise SystemExit(f"BLOCK: unable to allocate unique json path in {directory}")
 
 
 def repo_root_from_arg(value: str | None) -> Path:
@@ -542,8 +570,6 @@ def cmd_write_review(args: argparse.Namespace) -> None:
     if not paths.task_dir.exists():
         raise SystemExit(f"BLOCK: missing task dir: {paths.task_dir}")
 
-    ts = now_compact()
-    out_path = paths.reviews_dir / f"{ts}-{review_type}.json"
     task_requirements = args.task_requirements or []
 
     if review_type == "plan":
@@ -627,7 +653,7 @@ def cmd_write_review(args: argparse.Namespace) -> None:
     payload["findings"] = findings
     payload["required_changes"] = args.required_changes or []
 
-    ensure_json(out_path, payload)
+    out_path = write_unique_json(paths.reviews_dir, [review_type, subtask_id], payload)
 
     workflow_lines = load_workflow_lines(paths.workflow)
     if review_type == "plan":
@@ -667,9 +693,6 @@ def cmd_write_evidence(args: argparse.Namespace) -> None:
     if not paths.task_dir.exists():
         raise SystemExit(f"BLOCK: missing task dir: {paths.task_dir}")
 
-    ts = now_compact()
-    out_path = paths.evidence_dir / f"{ts}-{args.kind}.json"
-
     template = load_template(template_root, "evidence.json")
     payload = json.loads(template)
     payload["task_id"] = task_id
@@ -683,7 +706,7 @@ def cmd_write_evidence(args: argparse.Namespace) -> None:
     payload["notes"] = args.notes or ""
     payload["ran_at"] = now_str()
 
-    ensure_json(out_path, payload)
+    out_path = write_unique_json(paths.evidence_dir, [args.kind, subtask_id], payload)
 
     workflow_lines = load_workflow_lines(paths.workflow)
     workflow_lines = replace_bullet_value(workflow_lines, "Latest evidence ref", str(rel_path(repo_root, out_path)))

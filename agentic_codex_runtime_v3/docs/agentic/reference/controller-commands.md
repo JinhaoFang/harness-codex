@@ -50,7 +50,7 @@
 - findings[] / required_changes[]（可选）
 
 输出：
-- review ref
+- review ref（唯一文件名；同类 review 并行写入不得互相覆盖）
 
 规则：
 - review judgment 不得写入 evidence 目录。
@@ -71,7 +71,7 @@
 - artifact_paths[] / notes（可选）
 
 输出：
-- evidence ref
+- evidence ref（唯一文件名；同类 evidence 并行写入不得互相覆盖）
 
 规则：
 - evidence 不得包含 review verdict。
