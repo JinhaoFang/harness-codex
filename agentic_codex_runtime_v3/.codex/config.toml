@@ -1,0 +1,31 @@
+# Project defaults for the agentic codex runtime.
+# Tune these values to fit your repo and security posture.
+
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+model_reasoning_effort = "medium"
+project_doc_max_bytes = 65536
+
+[agents]
+max_threads = 5
+max_depth = 1
+
+[agents.explorer]
+description = "read-only codebase explorer for world grounding before plans or changes."
+config_file = "agents/explorer.toml"
+
+[agents.worker]
+description = "implementation-focused agent for one grounded subtask inside an explicit write boundary."
+config_file = "agents/worker.toml"
+
+[agents.plan_reviewer]
+description = "read-only reviewer for grounded plan quality, reuse, verification, and rollback."
+config_file = "agents/plan_reviewer.toml"
+
+[agents.close_reviewer]
+description = "read-only reviewer for delivery readiness, drift, and evidence traceability."
+config_file = "agents/close_reviewer.toml"
+
+[agents.monitor]
+description = "read-only helper for waiting on long-running commands and reporting concise status."
+config_file = "agents/monitor.toml"

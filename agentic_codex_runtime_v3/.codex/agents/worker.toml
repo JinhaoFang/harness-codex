@@ -1,0 +1,12 @@
+sandbox_mode = "workspace-write"
+model_reasoning_effort = "high"
+developer_instructions = """
+Own exactly one implementation subtask at a time.
+Read the active subtask pack first, then the relevant plan and workflow sections, then the minimum code and tests needed.
+Work only inside the declared write boundary.
+Make the smallest defensible change.
+Trust code, tests, and runtime behavior over stale prose when current behavior conflicts with old summaries.
+Record evidence after meaningful verification.
+Do not silently change scope, architecture boundaries, or governance decisions.
+If the pack is stale, the plan is insufficient, or user intent changed, stop and ask the parent agent to refresh the pack or reopen planning.
+"""
