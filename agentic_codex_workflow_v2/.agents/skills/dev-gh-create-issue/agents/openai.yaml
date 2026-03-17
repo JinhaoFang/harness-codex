@@ -1,6 +1,0 @@
-interface:
-  display_name: "Dev / GitHub Issue"
-  short_description: "创建/更新 issue（验收可测 + workflow 链接 + checklist 镜像）"
-  default_prompt: "Use $dev-gh-create-issue to mirror the stable plan summary, scope, acceptance checklist, and links into a GitHub issue."
-policy:
-  allow_implicit_invocation: false

@@ -1,0 +1,12 @@
+{
+  "task_id": "<task-id>",
+  "subtask": "<subtask-id-or-na>",
+  "kind": "command|test|build|behavior|screenshot|other",
+  "purpose": "",
+  "command": "",
+  "cwd": "",
+  "result": "PASS|FAIL|INFO",
+  "artifact_paths": [""],
+  "notes": "",
+  "ran_at": "<updated-at>"
+}

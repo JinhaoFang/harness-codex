@@ -1,6 +1,0 @@
-interface:
-  display_name: "Dev / 评审路由"
-  short_description: "在 PLAN_REVIEW 与 CLOSE_REVIEW 之间选择 reviewer、skill 与 review mode"
-  default_prompt: "Use $dev-review-router to choose the correct reviewer role, specialist skill, and review mode for the current gate."
-policy:
-  allow_implicit_invocation: false

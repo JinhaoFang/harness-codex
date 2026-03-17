@@ -1,6 +1,0 @@
-interface:
-  display_name: "Dev / Build Phase Gate"
-  short_description: "进入 Committed Build 前的硬前置：flowcheck + 运行协议"
-  default_prompt: "Use $dev-build-phase to execute one approved BUILD phase from the current task pack and report evidence."
-policy:
-  allow_implicit_invocation: false

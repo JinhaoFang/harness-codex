@@ -1,0 +1,38 @@
+name: Security Checks
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main ]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for obvious secrets in repo
+        run: |
+          set -euo pipefail
+          if grep -RInE '(api[_-]?key|apikey|password|secret[_-]?key)\s*[=:]\s*["'\''][^"'\'']{8,}["'\'']' .; then
+            echo "❌ 检测到潜在密钥泄露（请改用环境变量/secret manager）"
+            exit 1
+          fi
+
+      - name: Check for dangerous commands
+        run: |
+          set -euo pipefail
+          if grep -RInE 'rm\s+-rf\s+/|mkfs|dd\s+if=|curl.*\|\s*(bash|sh)|wget.*\|\s*(bash|sh)' .; then
+            echo "❌ 检测到危险命令模式（需要明确风险与 review）"
+            exit 1
+          fi
+
+      # 可选：使用 gitleaks 作为更强的扫描（需要网络拉取 action）
+      # - name: Run gitleaks
+      #   uses: gitleaks/gitleaks-action@v2
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

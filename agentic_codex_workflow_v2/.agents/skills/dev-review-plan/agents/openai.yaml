@@ -1,6 +1,0 @@
-interface:
-  display_name: "Dev / 评审方案"
-  short_description: "独立评审 plan：PASS/NEEDS_CHANGES 并写回 workflow"
-  default_prompt: "Use $dev-review-plan to perform an independent PLAN_REVIEW from the current task pack and return PASS or NEEDS_CHANGES."
-policy:
-  allow_implicit_invocation: false

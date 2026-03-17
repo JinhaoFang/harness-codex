@@ -1,6 +1,0 @@
-interface:
-  display_name: "Dev / Agentdocs Checker"
-  short_description: "硬门禁与一致性检查：flowcheck / lint / coverage"
-  default_prompt: "Use $dev-agentdocs-check to run a deterministic preflight for agentdocs, task packs, or skill structure before the next gate."
-policy:
-  allow_implicit_invocation: false

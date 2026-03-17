@@ -1,6 +1,0 @@
-interface:
-  display_name: "Dev / 工作流入口路由"
-  short_description: "入口路由：判断熵值、状态、角色与下一合法动作建议集"
-  default_prompt: "Use $dev-workflow-router to decide entropy, current state, next legal action, and the right specialist for this task."
-policy:
-  allow_implicit_invocation: true
