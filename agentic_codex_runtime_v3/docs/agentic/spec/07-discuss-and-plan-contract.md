@@ -24,6 +24,8 @@
 - 成功时最短的 demo sentence 是什么
 - 哪些结果属于“看起来做了事，但并不算完成”
 
+> 要求：把“终态/完成定义”与“哪些不算完成”写进 `plan.md` 的 Acceptance（包含 `Not acceptable completion definitions`），并在 `workflow.md` 的 Discuss readiness 中将 `Terminal completion definition locked` 标记为 `YES`，否则不得进入 plan review。
+
 ### 2.2 需求边界
 
 - 明确不做什么
@@ -62,6 +64,7 @@
 - 交付物清楚了吗？
 - 目标效果清楚了吗？
 - 非目标清楚了吗？
+- 终态（完成定义）锁死了吗？哪些不算完成已经明确了吗？
 - 必保要求和可授权决定分开了吗？
 - 外部可观察的 acceptance 清楚了吗？
 - 关键 world anchors 找到了吗？
@@ -71,6 +74,13 @@
 - 未决问题已经收敛到受控集合了吗？
 
 如果其中任一关键项为否，正确动作不是“先写个 plan 试试”，而是继续 DISCUSS 或补 Ground in World。
+
+允许先起草 `plan.md` 作为澄清工具来暴露歧义，但在 DISCUSS 未达标前：
+
+- 不得将其视为已冻结的 Goal truth
+- 不得请求 plan review
+- 不得刷新 subtask pack 作为 review / implementation 的入口
+- 不得进入实现或 close-ready 判断
 
 这里的 95% 必须同时成立于两个方向：
 
@@ -85,7 +95,7 @@
 
 - Problem / Goal / Deliverable / Why now
 - Non-goals
-- Acceptance（包括外部可观察信号）
+- Acceptance（包括外部可观察信号与“哪些不算完成”）
 - Must-preserve requirements / You decide
 - Phase order / stage boundaries / approval points
 - World-grounded anchors

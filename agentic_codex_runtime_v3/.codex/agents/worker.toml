@@ -1,3 +1,5 @@
+name = "worker"
+description = "Implementation-focused agent for one grounded subtask inside an explicit write boundary."
 sandbox_mode = "workspace-write"
 model_reasoning_effort = "high"
 developer_instructions = """

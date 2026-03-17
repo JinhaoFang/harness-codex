@@ -17,6 +17,7 @@ updated_at: <updated-at>
 - User understanding 95%: NO
 - Project understanding 95%: NO
 - Deliverable / effect clarified: NO
+- Terminal completion definition locked: NO
 - Phase order / stage boundaries clarified: NO
 - Approval points clarified: NO
 - Review-before-action constraints clarified: NO

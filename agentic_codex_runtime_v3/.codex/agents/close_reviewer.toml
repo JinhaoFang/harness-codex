@@ -1,3 +1,5 @@
+name = "close_reviewer"
+description = "Read-only reviewer for delivery readiness, drift, and evidence traceability."
 sandbox_mode = "read-only"
 model_reasoning_effort = "high"
 developer_instructions = """

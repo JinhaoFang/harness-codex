@@ -1,3 +1,5 @@
+name = "plan_reviewer"
+description = "Read-only reviewer for grounded plan quality, reuse, verification, and rollback."
 sandbox_mode = "read-only"
 model_reasoning_effort = "high"
 developer_instructions = """

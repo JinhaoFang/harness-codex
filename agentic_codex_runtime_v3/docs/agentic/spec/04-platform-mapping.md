@@ -13,7 +13,7 @@
 - rules / skills injection
 
 平台表面：
-- Codex 的 `AGENTS.md` / skills / `.codex/config.toml` / multi-agent / MCP
+- Codex 的 `AGENTS.md` / skills / `.codex/config.toml` / Subagents / MCP
 - Claude Code 的 `CLAUDE.md` / skills / subagents / hooks / memory
 
 ## 2. Codex 映射
@@ -34,13 +34,20 @@
 - 任务特定方法注入
 - review / implementation 的按需扩展
 
-### 2.3 Multi-agents
-用于并行或隔离上下文执行。
+### 2.3 Subagents
+用于并行或隔离上下文执行（显式触发；子代理独立消耗 token）。
 
 在本规范中的职责：
 - fresh-context review
 - exploration / implementation 分离
 - 大任务并行探索或分工
+
+Codex 侧关键入口：
+- `~/.codex/agents/*.toml`（个人）与 `.codex/agents/*.toml`（项目）定义 custom agents（需 `name` / `description` / `developer_instructions`）
+- 若 custom agent 的 `name` 与内置 agent（如 `explorer`）同名，则 custom 优先
+- `.codex/config.toml` 的 `[agents]` 可配置 `max_threads` / `max_depth` / `job_max_runtime_seconds`
+- 子代理继承父会话沙箱策略；spawn 时会重新应用父会话的运行时覆盖（例如 approvals 变更）
+- 交互式 CLI 可用 `/agent` 查看与切换线程；批准请求可能从非活动线程浮出
 
 ### 2.4 Config / MCP
 属于 runtime orchestration / external integration。

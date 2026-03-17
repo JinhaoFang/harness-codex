@@ -10,6 +10,7 @@ Convert grounded understanding into a plan that can be reviewed independently.
 ## Preconditions
 - the deliverable, observable effect, non-goals, and acceptance are clear enough to draft a plan
 - user-side understanding and project-side understanding have both reached the DISCUSS 95% bar
+- the terminal completion definition is locked (what counts as done, and what does not)
 - must-preserve requirements and the remaining `You decide` space are explicit
 - world grounding already identified real code paths, tests, and reusable mechanisms
 
@@ -38,10 +39,16 @@ Write these sections in `plan.md`:
 - Break work into the smallest reviewable subtasks; if a subtask cannot state `Goal / Expected effect / Preconditions / Write boundary / Verify / Review focus`, split it.
 
 ## After drafting the plan
+- If you are still clarifying intent, you may draft a partial plan to surface questions, but do not treat it as frozen:
+  - do not refresh the subtask pack
+  - do not request plan review
+  - do not move workflow state forward
 - refresh the active subtask pack:
   `python .codex/tools/agentctl.py refresh-pack --task-id <task-id> --subtask <subtask-id>`
-- move workflow state forward:
-  `python .codex/tools/agentctl.py update-current --task-id <task-id> --current-gate "Freeze Goal Truth" --allowed-next-action "plan-review" --active-subtask <subtask-id> --event "drafted plan from grounded anchors"`
+- move workflow state forward only after a refreshed pack exists:
+  `python .codex/tools/agentctl.py update-current --task-id <task-id> --current-gate "Freeze Goal Truth" --allowed-next-action "plan-review" --active-subtask <subtask-id> --event "plan drafted and pack refreshed; ready for plan review"`
+- preflight before requesting an independent plan review:
+  `python .codex/tools/agentctl.py check-gate --task-id <task-id> --action plan-review`
 
 ## Do not
 - do not put workflow logs in `plan.md`

@@ -9,7 +9,7 @@
 
 - `AGENTS.md` = Codex 自动加载的仓库工作协议。
 - `.codex/config.toml` = 项目 Codex 默认配置和角色注册表。
-- `.codex/agents/*.toml` = 用于多智能体工作的精细化角色配置。
+- `.codex/agents/*.toml` = 用于 Subagents（子代理协作）的 custom agents 角色配置（需 `name` / `description` / `developer_instructions`）。
 - `.agents/skills/*` = 仓库技能。
 - `.codex/tools/agentctl.py` = 确定性控制平面。
 - `docs/agentic/spec/07-discuss-and-plan-contract.md` = `DISCUSS -> PLAN` 的最小冻结合同。
@@ -39,7 +39,7 @@
 
 - 不要为了修补流程问题而新增长期工件；优先强化现有 `AGENTS.md`、`plan.md`、`workflow.md`、review/evidence schema、subtask-pack 与 controller。
 - 在冻结计划之前，必须将每个任务立足于当前代码库。
-- 将 `DISCUSS -> PLAN` 视为最重 gate；在 draft plan 前，必须先澄清交付物、目标效果、必保要求、非目标、证据信号、写入边界、阶段顺序、审批点、删除 / 迁移条件与未决问题。
+- 将 `DISCUSS -> PLAN` 视为最重 gate；在 draft plan 前，必须先澄清交付物、目标效果、终态（完成定义）与哪些不算完成、必保要求、非目标、证据信号、写入边界、阶段顺序、审批点、删除 / 迁移条件与未决问题。
 - `DISCUSS` 只有在“用户意图理解度 >= 95%”且“项目现实理解度 >= 95%”同时成立时才算完成；不得用“plan 已经写出来了”倒推 `DISCUSS` 已完成。
 - 在计划评审通过之前不得实施。
 - 在关闭评审通过之前不得归档。
@@ -69,6 +69,9 @@
 - `plan_reviewer`：独立评估计划的可执行性和立足依据。
 - `close_reviewer`：独立评估交付就绪程度和偏差。
 - `monitor`：等待、轮询并报告长时命令或 subagent 状态，不扩展任务范围。
+- 子代理默认启用但需要显式触发；每个子代理独立执行与消耗 token。
+- 子代理继承父会话的沙箱策略；spawn 时会重新应用父会话的运行时覆盖（例如 approvals/`--yolo` 变更）。
+- 交互式 CLI 可用 `/agent` 查看与切换线程；批准请求可能从非活动线程浮出。
 
 ## 控制器命令
 

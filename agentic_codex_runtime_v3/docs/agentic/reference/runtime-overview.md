@@ -6,7 +6,7 @@ This package turns the v3 design into a Codex-native runtime.
 
 - `AGENTS.md`: repository working agreement and routing hints.
 - `.codex/config.toml`: project defaults and role registry.
-- `.codex/agents/*.toml`: narrow role behavior.
+- `.codex/agents/*.toml`: custom agents (Subagents) role behavior (`name` / `description` / `developer_instructions`). (User-scope: `~/.codex/agents/`.)
 - `.agents/skills/*`: reusable methods and stage-local guidance.
 - `.codex/tools/agentctl.py`: deterministic controller.
 - `.agentdocs/`: runtime truth and evidence storage.

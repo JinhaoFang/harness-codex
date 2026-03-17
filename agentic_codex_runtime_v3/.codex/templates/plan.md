@@ -20,6 +20,7 @@ updated_at: <updated-at>
 - Success criteria: 
 - User-visible acceptance signal: 
 - Out-of-scope guardrail: 
+- Not acceptable completion definitions: 
 
 ## Requirement split
 - User-confirmed requirements: 

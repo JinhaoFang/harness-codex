@@ -16,6 +16,7 @@ DISCUSS_READINESS_LABELS = [
     "User understanding 95%",
     "Project understanding 95%",
     "Deliverable / effect clarified",
+    "Terminal completion definition locked",
     "Phase order / stage boundaries clarified",
     "Approval points clarified",
     "Review-before-action constraints clarified",
@@ -283,7 +284,12 @@ def plan_gate_errors(plan_path: Path, task_id: str) -> list[str]:
             errors.append(f"plan missing Goal/{label}")
     if not any(has_content(line.split(":", 1)[1] if ":" in line else line[2:]) for line in section_slice(lines, "## Non-goals") if line.strip().startswith("-")):
         errors.append("plan missing Non-goals content")
-    for label in ["Success criteria", "User-visible acceptance signal", "Out-of-scope guardrail"]:
+    for label in [
+        "Success criteria",
+        "User-visible acceptance signal",
+        "Out-of-scope guardrail",
+        "Not acceptable completion definitions",
+    ]:
         if not has_content(acceptance.get(label)):
             errors.append(f"plan missing Acceptance/{label}")
     for label in ["User-confirmed requirements", "Project / world constraints", "Must-preserve requirements", "You decide"]:
@@ -339,6 +345,11 @@ def discuss_gate_errors(lines: list[str]) -> list[str]:
         value = find_bullet_value(lines, label)
         if value is None:
             errors.append(f"workflow missing Discuss readiness bullet: {label}")
+            continue
+        if label == "Terminal completion definition locked":
+            # Terminal completion definition is always applicable; do not allow N/A.
+            if (value or "").strip().upper() != "YES":
+                errors.append(f"Discuss readiness not satisfied: {label} = {value}")
             continue
         if not status_counts_as_ready(value):
             errors.append(f"Discuss readiness not satisfied: {label} = {value}")
@@ -538,8 +549,10 @@ def cmd_create_task(args: argparse.Namespace) -> None:
     ensure_text(paths.plan, render_plan(template_root, task_id, title))
     ensure_text(paths.workflow, render_workflow(template_root, task_id, title, subtask_id, repo_root=repo_root))
 
-    index_path = agentdocs_root(repo_root) / "index.md"
-    append_index_entry(index_path, f"- {task_id} — {title} — .agentdocs/tasks/{task_id}/workflow.md")
+    # Derived indexes are cheap to regenerate and should stay deterministic.
+    # Do not incrementally append: the active index may not contain "<!-- NONE -->"
+    # after a prior sync, which would place entries in the wrong section.
+    sync_indexes(repo_root)
 
     print("OK: created task")
     print(f"- task: {paths.task_dir}")

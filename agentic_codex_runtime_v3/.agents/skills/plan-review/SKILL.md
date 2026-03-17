@@ -19,11 +19,13 @@ Use this skill from the `plan_reviewer` role or in an equivalent read-only revie
 - the minimum world anchors needed to judge the plan
 
 ## Review questions
+- Does the plan define a single terminal completion definition, and explicitly reject "not acceptable completion" definitions?
 - Does the plan preserve the confirmed task rhythm, stage order, approval points, and review-before-action constraints?
 - Does it keep user-confirmed requirements separate from agent execution latitude and unfrozen assumptions?
 - Does the plan match the actual codebase, tests, and interfaces?
 - Does it use only current world objects as world-grounded anchors?
 - For migration / deletion / reclassification tasks, did it review the source materials and preserve enough disposition evidence?
+- Does the phase order prevent "premature cleanup" while successor work still depends on legacy materials?
 - Does it miss an obvious reusable mechanism?
 - Is the write boundary explicit and safe?
 - Can the verification section really prove completion?
@@ -32,7 +34,7 @@ Use this skill from the `plan_reviewer` role or in an equivalent read-only revie
 
 ## Review style
 - Use fresh context.
-- Fully check task requirements and Goal truth core constraints; they are not sampleable.
+- Fully check task requirements, the workflow Discuss readiness constraints, and Goal truth core constraints; they are not sampleable.
 - World truth may be sampled only when you record the scope, basis, residual risk, and actual materials accessed.
 - Inspect only the minimum anchors needed for a grounded judgment once the mandatory full checks above are satisfied.
 - Lead with concrete findings and the smallest blocking delta.

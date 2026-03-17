@@ -4,7 +4,7 @@
 > - https://developers.openai.com/codex/rules
 > - https://developers.openai.com/codex/guides/agents-md
 > - https://developers.openai.com/codex/skills
-> - https://developers.openai.com/codex/multi-agent
+> - https://developers.openai.com/codex/subagents
 
 ---
 
@@ -13,7 +13,7 @@
 1. [Rules - 命令执行规则控制](#1-rules---命令执行规则控制)
 2. [AGENTS.md - 自定义指令](#2-agentsmd---自定义指令)
 3. [Agent Skills - 技能扩展](#3-agent-skills---技能扩展)
-4. [Multi-agents - 多代理协作](#4-multi-agents---多代理协作)
+4. [Subagents - 子代理协作](#4-subagents---子代理协作)
 
 ---
 
@@ -368,32 +368,32 @@ dependencies:
 
 ---
 
-## 4. Multi-agents - 多代理协作
+## 4. Subagents - 子代理协作
 
-Codex 可以通过并行生成专门的代理来运行多代理工作流，然后在一个响应中收集它们的结果。这对于高度并行的复杂任务特别有帮助，例如代码库探索或实现多步骤功能计划。
+Codex 可以通过并行生成专门的子代理（subagents）来运行子代理工作流，然后在一个响应中收集它们的结果。这对于高度并行的复杂任务特别有帮助，例如代码库探索或实现多步骤功能计划。
 
-### 启用多代理功能
+通过子代理工作流，你还可以定义自己的**自定义代理（custom agents）**，根据任务配置不同的模型和指令。
 
-多代理工作流目前是实验性的，需要显式启用。
+> **注意**：当前 Codex 版本**默认启用**子代理工作流，无需额外配置。
 
-从 CLI 使用 `/experimental`，启用 **Multi-agents**，然后重启 Codex。
+### 核心概念
 
-你也可以直接在配置文件（`~/.codex/config.toml`）中添加 `multi_agent` 功能标志：
+- **显式触发**：Codex 只在你明确要求时才生成子代理
+- **Token 消耗**：每个子代理独立执行模型和工具工作，因此子代理工作流比单代理运行消耗更多 token
+- **编排自动化**：Codex 处理代理间的编排，包括生成新子代理、路由后续指令、等待结果和关闭代理线程
+- **结果合并**：当多个代理运行时，Codex 等待所有结果可用后返回合并响应
 
-```toml
-[features]
-multi_agent = true
-```
+### 内置代理
 
-### 基本用法
+Codex 内置以下代理：
 
-Codex 处理代理间的编排，包括生成新的子代理、路由后续指令、等待结果和关闭代理线程。
+| 代理名称 | 用途 |
+|---------|------|
+| `default` | 通用回退代理 |
+| `worker` | 专注于执行的代理，用于实现和修复 |
+| `explorer` | 重读取的代码库探索代理 |
 
-当许多代理运行时，Codex 等待所有请求的结果可用，然后返回合并的响应。
-
-Codex 会自动决定何时生成新代理，或者你可以显式要求它这样做。
-
-### 示例：PR 审查
+### 基本用法示例
 
 ```
 I would like to review the following points on the current PR (this branch vs main).
@@ -410,9 +410,64 @@ Spawn one agent per point, wait for all of them, and summarize the result for ea
 
 - 使用 `/agent` 在 CLI 中切换活动代理线程并检查正在进行的线程
 - 直接要求 Codex 引导正在运行的子代理、停止它或关闭已完成的代理线程
-- `wait` 工具支持长时间轮询窗口（每次调用最多 1 小时）
 
-### spawn_agents_on_csv 批量任务
+### 全局设置
+
+在配置文件的 `[agents]` 部分配置全局子代理设置：
+
+| 字段 | 类型 | 必需 | 用途 |
+|------|------|------|------|
+| `agents.max_threads` | number | No | 同时打开的代理线程最大数量（默认 `6`） |
+| `agents.max_depth` | number | No | 生成的代理嵌套深度（根会话从 0 开始，默认 `1`） |
+| `agents.job_max_runtime_seconds` | number | No | `spawn_agents_on_csv` 作业的每个工作器默认超时（默认 1800 秒） |
+
+---
+
+## 自定义代理（Custom Agents）
+
+要定义自己的自定义代理，在以下位置添加独立的 TOML 文件：
+- `~/.codex/agents/` - 个人代理
+- `.codex/agents/` - 项目范围代理
+
+每个文件定义一个自定义代理。Codex 通过 `name` 字段识别代理。
+
+### 自定义代理文件 Schema
+
+| 字段 | 类型 | 必需 | 用途 |
+|------|------|------|------|
+| `name` | string | **是** | Codex 在生成或引用此代理时使用的代理名称 |
+| `description` | string | **是** | 人类面向的指导，说明何时使用此代理 |
+| `developer_instructions` | string | **是** | 定义代理行为的核心指令 |
+| `nickname_candidates` | string[] | No | 生成的代理的可选显示昵称池 |
+
+可选字段（省略时从父会话继承）：
+- `model`：使用的模型
+- `model_reasoning_effort`：推理努力程度
+- `sandbox_mode`：沙箱模式
+- `mcp_servers`：MCP 服务器配置
+- `skills.config`：技能配置
+
+> **注意**：如果自定义代理名称匹配内置代理（如 `explorer`），你的自定义代理优先。
+
+### 显示昵称（nickname_candidates）
+
+使用 `nickname_candidates` 为生成的代理分配更易读的显示名称。这在运行多个相同自定义代理实例时特别有用，可以让 UI 显示不同的标签。
+
+```toml
+name = "reviewer"
+description = "PR reviewer focused on correctness, security, and missing tests."
+developer_instructions = """
+Review code like an owner.
+Prioritize correctness, security, behavior regressions, and missing test coverage.
+"""
+nickname_candidates = ["Atlas", "Delta", "Echo"]
+```
+
+昵称仅用于显示，Codex 仍通过 `name` 识别和生成代理。
+
+---
+
+## spawn_agents_on_csv 批量任务
 
 当你有许多类似任务可以表示为每个工作项一行时，使用 `spawn_agents_on_csv`。Codex 读取 CSV，每行生成一个工作子代理，等待整批完成，并将合并结果导出到 CSV。
 
@@ -428,6 +483,8 @@ Spawn one agent per point, wait for all of them, and summarize the result for ea
 - `output_schema`：当每个工作器应返回具有固定形状的 JSON 对象时
 - `output_csv_path`、`max_concurrency`、`max_runtime_seconds`：作业控制
 
+每个工作器必须调用 `report_agent_job_result` 一次。如果工作器退出时未报告结果，Codex 在导出的 CSV 中将该行标记为错误。
+
 **示例提示：**
 
 ```
@@ -441,36 +498,12 @@ Then call spawn_agents_on_csv with:
 - output_schema: an object with required string fields path, risk, summary, and follow_up
 ```
 
-### 代理角色配置
+---
 
-在配置的 `[agents]` 部分配置代理角色。角色可以在本地配置（通常是 `~/.codex/config.toml`）或项目特定的 `.codex/config.toml` 中共享。
+## 示例：PR 审查团队
 
-**内置角色：**
-- `default`：通用回退角色
-- `worker`：专注于执行的角色，用于实现和修复
-- `explorer`：重读取的代码库探索角色
-- `monitor`：长时间运行命令/任务监控角色（优化用于等待/轮询）
-
-#### 配置 Schema
-
-| 字段 | 类型 | 必需 | 用途 |
-|------|------|------|------|
-| `agents.max_threads` | number | No | 同时打开的代理线程最大数量 |
-| `agents.max_depth` | number | No | 生成的代理线程最大嵌套深度（根会话从 0 开始） |
-| `agents.job_max_runtime_seconds` | number | No | `spawn_agents_on_csv` 作业的每个工作器默认超时 |
-| `[agents.<name>]` | table | No | 声明角色。`<name>` 用作生成代理时的 `agent_type` |
-| `agents.<name>.description` | string | No | 显示给 Codex 的人类面向角色指导 |
-| `agents.<name>.config_file` | string (path) | No | 应用于该角色生成代理的 TOML 配置层路径 |
-
-**注意：**
-- `agents.max_depth` 默认为 `1`，允许直接子代理生成但防止更深嵌套
-- 相对 `config_file` 路径相对于定义角色的 `config.toml` 文件解析
-- 如果角色名称匹配内置角色（例如 `explorer`），你的用户定义角色优先
-
-### 示例 1：PR 审查团队
-
-此模式将审查分为三个专注角色：
-- `explorer`：映射代码库并收集证据
+此模式将审查分为三个专注的自定义代理：
+- `pr_explorer`：映射代码库并收集证据
 - `reviewer`：查找正确性、安全性和测试风险
 - `docs_researcher`：通过专用 MCP 服务器检查框架或 API 文档
 
@@ -480,23 +513,13 @@ Then call spawn_agents_on_csv with:
 [agents]
 max_threads = 6
 max_depth = 1
-
-[agents.explorer]
-description = "Read-only codebase explorer for gathering evidence before changes are proposed."
-config_file = "agents/explorer.toml"
-
-[agents.reviewer]
-description = "PR reviewer focused on correctness, security, and missing tests."
-config_file = "agents/reviewer.toml"
-
-[agents.docs_researcher]
-description = "Documentation specialist that uses the docs MCP server to verify APIs and framework behavior."
-config_file = "agents/docs-researcher.toml"
 ```
 
-**`agents/explorer.toml`：**
+**`.codex/agents/pr-explorer.toml`：**
 
 ```toml
+name = "pr_explorer"
+description = "Read-only codebase explorer for gathering evidence before changes are proposed."
 model = "gpt-5.3-codex-spark"
 model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
@@ -507,10 +530,12 @@ Prefer fast search and targeted file reads over broad scans.
 """
 ```
 
-**`agents/reviewer.toml`：**
+**`.codex/agents/reviewer.toml`：**
 
 ```toml
-model = "gpt-5.3-codex"
+name = "reviewer"
+description = "PR reviewer focused on correctness, security, and missing tests."
+model = "gpt-5.4"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
 developer_instructions = """
@@ -520,9 +545,11 @@ Lead with concrete findings, include reproduction steps when possible, and avoid
 """
 ```
 
-**`agents/docs-researcher.toml`：**
+**`.codex/agents/docs-researcher.toml`：**
 
 ```toml
+name = "docs_researcher"
+description = "Documentation specialist that uses the docs MCP server to verify APIs and framework behavior."
 model = "gpt-5.3-codex-spark"
 model_reasoning_effort = "medium"
 sandbox_mode = "read-only"
@@ -539,38 +566,36 @@ url = "https://developers.openai.com/mcp"
 **使用提示：**
 
 ```
-Review this branch against main. Have explorer map the affected code paths,
+Review this branch against main. Have pr_explorer map the affected code paths,
 reviewer find real risks, and docs_researcher verify the framework APIs that the patch relies on.
 ```
 
-### 示例 2：前端集成调试团队
+---
+
+## 示例：前端集成调试
 
 此模式对于 UI 回归、不稳定的浏览器流程或跨越应用程序代码和运行产品的集成错误很有用。
 
-**项目配置 (`.codex/config.toml`)：**
+**`.codex/agents/code-mapper.toml`：**
 
 ```toml
-[agents]
-max_threads = 6
-max_depth = 1
-
-[agents.explorer]
+name = "code_mapper"
 description = "Read-only codebase explorer for locating the relevant frontend and backend code paths."
-config_file = "agents/explorer.toml"
-
-[agents.browser_debugger]
-description = "UI debugger that uses browser tooling to reproduce issues and capture evidence."
-config_file = "agents/browser-debugger.toml"
-
-[agents.worker]
-description = "Implementation-focused agent for small, targeted fixes after the issue is understood."
-config_file = "agents/worker.toml"
+model = "gpt-5.3-codex-spark"
+model_reasoning_effort = "medium"
+sandbox_mode = "read-only"
+developer_instructions = """
+Map the code that owns the failing UI flow.
+Identify entry points, state transitions, and likely files before the worker starts editing.
+"""
 ```
 
-**`agents/browser-debugger.toml`：**
+**`.codex/agents/browser-debugger.toml`：**
 
 ```toml
-model = "gpt-5.3-codex"
+name = "browser_debugger"
+description = "UI debugger that uses browser tooling to reproduce issues and capture evidence."
+model = "gpt-5.4"
 model_reasoning_effort = "high"
 sandbox_mode = "workspace-write"
 developer_instructions = """
@@ -584,18 +609,39 @@ url = "http://localhost:3000/mcp"
 startup_timeout_sec = 20
 ```
 
+**`.codex/agents/ui-fixer.toml`：**
+
+```toml
+name = "ui_fixer"
+description = "Implementation-focused agent for small, targeted fixes after the issue is understood."
+model = "gpt-5.3-codex-spark"
+model_reasoning_effort = "medium"
+developer_instructions = """
+Own the fix once the issue is reproduced.
+Make the smallest defensible change, keep unrelated files untouched, and validate only the behavior you changed.
+"""
+
+[[skills.config]]
+path = "/Users/me/.agents/skills/docs-editor/SKILL.md"
+enabled = false
+```
+
 **使用提示：**
 
 ```
 Investigate why the settings modal fails to save. Have browser_debugger reproduce it,
-explorer trace the responsible code path, and worker implement the smallest fix once the failure mode is clear.
+code_mapper trace the responsible code path, and ui_fixer implement the smallest fix once the failure mode is clear.
 ```
 
-### 安全与沙箱
+---
 
-子代理继承你当前的沙箱策略。在交互式 CLI 会话中，批准请求可以从非活动代理线程浮出水面。在非交互流程中，需要新批准的操作会失败，错误会返回到父工作流。
+## 安全与沙箱
 
-Codex 在生成子代理时也会重新应用父轮次的实时运行时覆盖，包括你在会话期间交互设置的沙箱和批准选择。
+- **沙箱继承**：子代理继承你当前的沙箱策略
+- **批准请求**：在交互式 CLI 会话中，批准请求可以从非活动代理线程浮出水面。批准覆盖层显示来源线程标签，你可以按 `o` 在批准/拒绝/回答请求前打开该线程
+- **非交互流程**：在非交互流程中，需要新批准的操作会失败，错误会返回到父工作流
+- **运行时覆盖**：Codex 在生成子代理时重新应用父轮次的实时运行时覆盖，包括你在会话期间交互设置的沙箱和批准选择（如 `/approvals` 更改或 `--yolo`），即使选定的自定义代理文件设置了不同的默认值
+- **代理级覆盖**：你也可以为单个自定义代理覆盖沙箱配置，例如显式标记一个代理为只读模式
 
 ---
 
@@ -606,4 +652,4 @@ Codex 在生成子代理时也会重新应用父轮次的实时运行时覆盖�
 | **Rules** | 控制命令执行权限 | `~/.codex/rules/default.rules` |
 | **AGENTS.md** | 项目和全局指令 | `AGENTS.md`、`AGENTS.override.md` |
 | **Skills** | 扩展 Codex 能力 | `.agents/skills/*/SKILL.md` |
-| **Multi-agents** | 并行代理协作 | `~/.codex/config.toml` 的 `[agents]` 部分 |
+| **Subagents** | 并行子代理协作 | `~/.codex/agents/*.toml`、`.codex/agents/*.toml` |
