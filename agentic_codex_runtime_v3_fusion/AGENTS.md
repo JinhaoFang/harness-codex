@@ -3,34 +3,25 @@
 ## 使命
 
 - 确保编码智能体的工作可复现、可验证、可逆、可恢复且可演进。
-- 将确定性正确性下沉到控制器中；将概率性工作保留在规划、评审和实施判断中。
-- 以 v3 runtime 为内核；将外部协作、并行执行和工程护栏作为可拔插模块，而不是新的真相层。
+- 将确定性正确性下沉到控制器中；将概率性工作保留在澄清、规划、评审和实施判断中。
 
 ## 仓库布局
 
-### Runtime core
 - `AGENTS.md` = Codex 自动加载的仓库工作协议。
 - `.codex/config.toml` = 项目 Codex 默认配置和角色注册表。
-- `.codex/agents/*.toml` = custom agents 角色配置。
-- `.agents/skills/*` = 仓库技能（core + optional）。
+- `.codex/agents/*.toml` = 用于 Subagents（子代理协作）的 custom agents 角色配置（需 `name` / `description` / `developer_instructions`）。
+- `.agents/skills/*` = 仓库技能。
 - `.codex/tools/agentctl.py` = 确定性控制平面。
 - `docs/agentic/spec/07-discuss-and-plan-contract.md` = `DISCUSS -> PLAN` 的最小冻结合同。
-- `docs/agentic/spec/08-fusion-decision-checklist.md` = 融合吸收边界与保留/重写/放弃清单。
-- `.agentdocs/insight.md` = 跨任务可复用经验（非真相层，必须可复核）。
-- `.agentdocs/architecture/` = 架构专题 SoT（必须可用 code/tests/evidence 复核）。
+- `.agentdocs/insight.md` = 跨任务可复用的工程/迁移/治理经验（非真相层；禁止复制单次 workflow；必须带可复核 anchors）。
+- `.agentdocs/architecture/` = 项目架构设计专题 SoT（非真相层；必须可用 code/tests/evidence 复核）。
 - `.agentdocs/tasks/<task-id>/plan.md` = 目标事实。
 - `.agentdocs/tasks/<task-id>/workflow.md` = 过程事实。
 - `.agentdocs/tasks/<task-id>/reviews/*.json` = 评审结论。
 - `.agentdocs/tasks/<task-id>/evidence/*.json` = 过程证据。
 - `.agentdocs/tasks/<task-id>/subtask-packs/*.md` = 衍生摘要。
 - 代码 / 测试 / 运行时行为 = 世界事实。
-
-### Optional modules
-- `.githooks/*` / `.github/workflows/*` = repo-level engineering guardrails。
-- `docs/contracts/*` = 可选长期合同文档（business/API/UI），不是 task truth。
-- `github-collaboration` = 外部协作镜像适配器，GitHub 不是 SoT。
-- `worktree-isolation` = 并行执行工作区隔离。
-- `session-recovery` = session 恢复与中断续作协议（无独立 ledger）。
+- `docs/agentic/` = 更深层的设计原理和迁移说明。
 
 ## 本地项目命令
 
@@ -47,10 +38,15 @@
 ## 硬性规则
 
 - 不要为了修补流程问题而新增长期工件；优先强化现有 `AGENTS.md`、`plan.md`、`workflow.md`、review/evidence schema、subtask-pack 与 controller。
-- 不要把 GitHub issue/PR、worktree、session history 或外部评论升级成新的真相层。
-- 在冻结计划之前，必须将每个任务立足于当前代码库。
+- 在冻结计划之前，必须先把任务立足于当前代码库，并先把用户意图澄清到可冻结程度。
 - 将 `DISCUSS -> PLAN` 视为最重 gate；在 draft plan 前，必须先澄清交付物、目标效果、终态（完成定义）与哪些不算完成、必保要求、非目标、证据信号、写入边界、阶段顺序、审批点、删除 / 迁移条件与未决问题。
+- `DISCUSS` 不是主观“差不多懂了”的自评；必须通过结构化澄清循环、缺口扫描与 discuss summary 确认来收敛。
 - `DISCUSS` 只有在“用户意图理解度 >= 95%”且“项目现实理解度 >= 95%”同时成立时才算完成；不得用“plan 已经写出来了”倒推 `DISCUSS` 已完成。
+- draft `plan.md` 允许作为暴露歧义的澄清工具，但在 DISCUSS 未达标前：
+  - 不得将其视为 frozen Goal truth
+  - 不得请求 `plan-review`
+  - 不得刷新 subtask pack 作为 review / implementation 的入口
+  - 不得进入实现或 close-ready 判断
 - 在计划评审通过之前不得实施。
 - 在关闭评审通过之前不得归档。
 - 保持 `plan.md` 仅关注目标事实。
@@ -66,7 +62,7 @@
 
 ## 最低关卡
 
-- **理解 / 讨论 (Discuss / Understand)**：明确交付物、目标效果、非目标、必保要求、可授权决定、验收标准、阶段顺序、审批点、删除 / 迁移条件和未决问题，并达到用户 / 项目双 95% 理解度。
+- **理解 / 讨论 (Discuss / Understand)**：通过结构化澄清循环明确交付物、目标效果、非目标、必保要求、可授权决定、验收标准、阶段顺序、审批点、删除 / 迁移条件和未决问题，并达到用户 / 项目双 95% 理解度。
 - **立足世界 (Ground in World)**：检查入口点、关键符号、现有测试、可复用机制和兼容性约束。
 - **冻结目标事实 (Freeze Goal Truth)**：编写 `plan.md`，冻结交付物、效果、边界、不变量、验证 / 证据计划、回滚和子任务。
 - **独立评审 (Independent Review)**：使用全新上下文进行计划评审和关闭检查。
@@ -79,6 +75,9 @@
 - `plan_reviewer`：独立评估计划的可执行性和立足依据。
 - `close_reviewer`：独立评估交付就绪程度和偏差。
 - `monitor`：等待、轮询并报告长时命令或 subagent 状态，不扩展任务范围。
+- 子代理默认启用但需要显式触发；每个子代理独立执行与消耗 token。
+- 子代理继承父会话的沙箱策略；spawn 时会重新应用父会话的运行时覆盖（例如 approvals/`--yolo` 变更）。
+- 交互式 CLI 可用 `/agent` 查看与切换线程；批准请求可能从非活动线程浮出。
 
 ## 控制器命令
 
@@ -88,7 +87,6 @@
 python .codex/tools/agentctl.py init-agentdocs
 python .codex/tools/agentctl.py create-task --task-id T001 --title "任务标题"
 python .codex/tools/agentctl.py update-current --task-id T001 --current-gate "Ground in World" --allowed-next-action "Freeze Goal Truth"
-python .codex/tools/agentctl.py update-current --task-id T001 --external-ref "gh:issue#123" --external-ref "gh:pr#456"
 python .codex/tools/agentctl.py refresh-pack --task-id T001 --subtask S1
 python .codex/tools/agentctl.py check-gate --task-id T001 --action implement
 python .codex/tools/agentctl.py write-evidence --task-id T001 --subtask S1 --kind test --result PASS --purpose "已验证子任务" --command "<真实命令>"
@@ -96,35 +94,3 @@ python .codex/tools/agentctl.py write-review --task-id T001 --subtask S1 --revie
 python .codex/tools/agentctl.py archive --task-id T001
 python .codex/tools/agentctl.py reopen --task-id T001 --trigger "scope-change" --reason "用户更改了验收标准"
 ```
-
-## 技能路由
-
-### Core route
-- 在进入 `$world-grounding` 或 `$freeze-plan` 之前，先按 `docs/agentic/spec/07-discuss-and-plan-contract.md` 收敛 DISCUSS 结论。
-- 在起草或实质性修改计划之前使用 `$world-grounding`。
-- 在将立足理解转化为 `plan.md` 时使用 `$freeze-plan`。
-- 当包可能过期时，在实施或评审之前使用 `$refresh-subtask-pack`。
-- 仅从 `plan_reviewer` 角色使用 `$plan-review`。
-- 仅从 `worker` 角色使用 `$execute-subtask`。
-- 在有意义的验证运行之后使用 `$evidence-capture`。
-- 仅从 `close_reviewer` 角色使用 `$close-review`。
-- 当范围变更、评审失败或必须恢复已归档工作时使用 `$reopen-fix`。
-
-### Optional route
-- 需要跨 session 恢复、中断续作、复工前预检时使用 `$session-recovery`。
-- 需要多 worktree / 多 agent 并行隔离时使用 `$worktree-isolation`。
-- 需要把任务同步到 GitHub issue/PR，但又不把 GitHub 变成真相层时使用 `$github-collaboration`。
-- 需要沉淀长期业务 / API / UI 合同时使用 `$contract-artifacts`。
-
-## “完成”的定义
-
-- 相关子任务包是新鲜的。
-- 实际运行了必要的仓库构建 / 测试 / lint 命令。
-- 证据存在并指向真实的命令、文件或运行时产物。
-- 当前阶段的独立评审已通过。
-- `validate-refs` 通过。
-- `workflow.md` 反映了真实的下一个合法动作。
-
-## 如果指引内容增加
-
-保持本文件实用性。将较长的原理或详细规则放在 `docs/agentic/` 或技能中，然后在此处链接它们。
