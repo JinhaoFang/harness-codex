@@ -35,8 +35,10 @@
 5. 创建任务框架：
 
    ```bash
-   python .codex/tools/agentctl.py create-task --task-id T001 --title "示例任务"
+   python .codex/tools/agentctl.py create-task --slug sample-task --title "示例任务"
    ```
+
+   `create-task` 会用 `--slug` 自动生成 `YYYYMMDD-HHMM[-NN]-<slug>` 格式的 task id，并在命令输出中显示实际 id。`v3` 仍兼容显式 `--task-id T001` 这类旧写法。
 
    `create-task` 只会创建 skeleton，不会自动生成可用于 review / implementation 的 pack。
 

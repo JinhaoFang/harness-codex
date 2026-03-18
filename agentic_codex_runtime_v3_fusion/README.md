@@ -51,8 +51,10 @@
 4. 创建任务骨架：
 
    ```bash
-   python .codex/tools/agentctl.py create-task --task-id T001 --title "示例任务"
+   python .codex/tools/agentctl.py create-task --slug sample-task --title "示例任务"
    ```
+
+   `fusion` 默认推荐使用 `--slug`。controller 会自动生成 `YYYYMMDD-HHMM[-NN]-<slug>` 格式的 task id，并在命令输出中显示；`--task-id` 仅用于迁移或显式 override。
 
 5. 只有在需要 repo guardrails 时，再启用 git hooks：
 

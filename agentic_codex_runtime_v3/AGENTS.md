@@ -79,14 +79,17 @@
 
 ```bash
 python .codex/tools/agentctl.py init-agentdocs
+python .codex/tools/agentctl.py create-task --slug fastapi-backend-audit --title "FastAPI backend audit"
+# 或兼容旧写法：
 python .codex/tools/agentctl.py create-task --task-id T001 --title "任务标题"
-python .codex/tools/agentctl.py update-current --task-id T001 --current-gate "Ground in World" --allowed-next-action "Freeze Goal Truth"
-python .codex/tools/agentctl.py refresh-pack --task-id T001 --subtask S1
-python .codex/tools/agentctl.py check-gate --task-id T001 --action implement
-python .codex/tools/agentctl.py write-evidence --task-id T001 --subtask S1 --kind test --result PASS --purpose "已验证子任务" --command "<真实命令>"
-python .codex/tools/agentctl.py write-review --task-id T001 --subtask S1 --review-type plan --decision PASS
-python .codex/tools/agentctl.py archive --task-id T001
-python .codex/tools/agentctl.py reopen --task-id T001 --trigger "scope-change" --reason "用户更改了验收标准"
+# 记下 create-task 输出里的 <task-id>，后续命令统一使用它
+python .codex/tools/agentctl.py update-current --task-id <task-id> --current-gate "Ground in World" --allowed-next-action "Freeze Goal Truth"
+python .codex/tools/agentctl.py refresh-pack --task-id <task-id> --subtask S1
+python .codex/tools/agentctl.py check-gate --task-id <task-id> --action implement
+python .codex/tools/agentctl.py write-evidence --task-id <task-id> --subtask S1 --kind test --result PASS --purpose "已验证子任务" --command "<真实命令>"
+python .codex/tools/agentctl.py write-review --task-id <task-id> --subtask S1 --review-type plan --decision PASS
+python .codex/tools/agentctl.py archive --task-id <task-id>
+python .codex/tools/agentctl.py reopen --task-id <task-id> --trigger "scope-change" --reason "用户更改了验收标准"
 ```
 
 ## 技能路由

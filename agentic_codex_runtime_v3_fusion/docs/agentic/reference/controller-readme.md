@@ -4,7 +4,7 @@ controller 是 **deterministic control plane**，应当单独设计与实现，�
 
 本目录提供：
 
-- `docs/agentic/reference/controller-commands.md`：V3 controller 最小命令面（规范）
+- `docs/agentic/reference/controller-commands.md`：Fusion controller 最小命令面（规范）
 - `.codex/tools/agentctl.py`：参考实现（可在目标仓库中运行），用于一键初始化 `.agentdocs/`、创建 task 骨架、写入 review/evidence、再生 subtask pack、校验引用与归档
 
 ## 职责边界
@@ -46,12 +46,13 @@ skills MUST NOT:
 
 ```bash
 python .codex/tools/agentctl.py init-agentdocs
-python .codex/tools/agentctl.py create-task --task-id T001 --title "My Task"
+python .codex/tools/agentctl.py create-task --slug my-task --title "My Task"
 ```
 
-### 重要约束（V3）
+### 重要约束（Fusion）
 
 - `delegation-brief` 是 session wrapper，默认不作为长期对象落盘。
 - `subtask-pack` 是派生 digest，可再生；不允许引用或保留 V2 的 `task-packs/`。
+- `fusion` 默认使用 `--slug` 生成 `YYYYMMDD-HHMM[-NN]-<slug>`；`--task-id` 只应作为显式 override。
 - `create-task` 只创建 skeleton；`subtask-pack` 应在 grounded plan 存在后再刷新。
 - `plan.md` 承载 Goal truth；`workflow.md` 承载 Process truth；review 与 evidence 必须分离写入。

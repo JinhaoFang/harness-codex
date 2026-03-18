@@ -110,6 +110,51 @@ def task_dir(repo_root: Path, task_id: str, *, archived: bool = False) -> Path:
     return root / task_id
 
 
+def validate_task_id(value: str) -> str:
+    task_id = value.strip()
+    if not task_id:
+        raise SystemExit("BLOCK: task id must not be empty")
+    if task_id in {".", ".."}:
+        raise SystemExit(f"BLOCK: invalid task id: {task_id}")
+    if "/" in task_id or "\\" in task_id:
+        raise SystemExit(f"BLOCK: task id must be a single path segment: {task_id}")
+    return task_id
+
+
+def normalize_task_slug(value: str) -> str:
+    raw = value.strip().lower()
+    raw = re.sub(r"[^a-z0-9]+", "-", raw)
+    raw = re.sub(r"-{2,}", "-", raw).strip("-")
+    if not raw:
+        raise SystemExit("BLOCK: slug must contain at least one ASCII letter or digit")
+    return raw
+
+
+def task_id_exists(repo_root: Path, task_id: str) -> bool:
+    return task_dir(repo_root, task_id, archived=False).exists() or task_dir(repo_root, task_id, archived=True).exists()
+
+
+def generate_task_id(repo_root: Path, slug: str) -> str:
+    base = f"{datetime.now(TZ).strftime('%Y%m%d-%H%M')}-{normalize_task_slug(slug)}"
+    if not task_id_exists(repo_root, base):
+        return base
+    for seq in range(1, 100):
+        candidate = f"{base}-{seq:02d}"
+        if not task_id_exists(repo_root, candidate):
+            return candidate
+    raise SystemExit(f"BLOCK: unable to allocate unique task id for slug: {slug}")
+
+
+def resolve_create_task_id(repo_root: Path, *, task_id: str | None, slug: str | None) -> str:
+    if task_id and slug:
+        raise SystemExit("BLOCK: create-task accepts either --task-id or --slug, not both")
+    if slug:
+        return generate_task_id(repo_root, slug)
+    if task_id:
+        return validate_task_id(task_id)
+    raise SystemExit("BLOCK: create-task requires --slug for normal use, or --task-id for an explicit override")
+
+
 def find_bullet_value(lines: list[str], bullet_label: str) -> str | None:
     pattern = re.compile(rf"^\s*-\s*{re.escape(bullet_label)}\s*:\s*(.*?)\s*$")
     for line in lines:
@@ -571,7 +616,7 @@ def cmd_create_task(args: argparse.Namespace) -> None:
     template_root = template_root_from_arg(args.template_root)
     ensure_agentdocs(repo_root)
 
-    task_id: str = args.task_id.strip()
+    task_id = resolve_create_task_id(repo_root, task_id=args.task_id, slug=args.slug)
     title: str = args.title.strip()
     subtask_id: str = (args.subtask or "S1").strip()
 
@@ -592,6 +637,7 @@ def cmd_create_task(args: argparse.Namespace) -> None:
     sync_indexes(repo_root)
 
     print("OK: created task")
+    print(f"- task id: {task_id}")
     print(f"- task: {paths.task_dir}")
     print(f"- plan: {paths.plan}")
     print(f"- workflow: {paths.workflow}")
@@ -1267,7 +1313,7 @@ def cmd_update_current(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(description="Agentic Engineering Spec v3 controller (reference implementation)")
+    p = argparse.ArgumentParser(description="Agentic Codex Runtime v3 Fusion controller (reference implementation)")
     p.add_argument("--repo-root", default=None, help="Target repo root (default: cwd)")
     p.add_argument("--template-root", default=None, help="Template root (default: .codex/templates next to this script)")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -1276,7 +1322,8 @@ def build_parser() -> argparse.ArgumentParser:
     x.set_defaults(fn=cmd_init_agentdocs)
 
     x = sub.add_parser("create-task", help="Create a new task skeleton under .agentdocs/tasks/<task-id>/")
-    x.add_argument("--task-id", required=True)
+    x.add_argument("--slug", default=None, help="Recommended: stable topic slug used to auto-generate YYYYMMDD-HHMM[-NN]-<slug>")
+    x.add_argument("--task-id", default=None, help="Optional explicit task id override for migration or manual control")
     x.add_argument("--title", required=True)
     x.add_argument("--subtask", default="S1", help="Default subtask id (default: S1)")
     x.add_argument("--force", action="store_true", help="Overwrite existing files in task dir")

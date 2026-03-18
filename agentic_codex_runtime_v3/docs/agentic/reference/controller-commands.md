@@ -145,12 +145,18 @@
 用途：创建 `.agentdocs/tasks/TASK_ID/` 任务骨架。
 
 输入：
-- task id
+- task id（可选；兼容显式旧 id）
+- stable topic slug（可选；推荐）
 - title
 - optional default subtask id（默认 S1）
 
+规则：
+- `--task-id` 与 `--slug` 二选一。
+- 使用 `--slug` 时，controller 自动生成 `YYYYMMDD-HHMM[-NN]-<slug>`。
+
 输出：
 - plan.md / workflow.md / reviews/ / evidence/ / subtask-packs/
+- chosen task id
 
 ## 10. sync-index
 

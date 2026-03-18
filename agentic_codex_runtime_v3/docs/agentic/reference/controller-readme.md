@@ -46,6 +46,8 @@ skills MUST NOT:
 
 ```bash
 python .codex/tools/agentctl.py init-agentdocs
+python .codex/tools/agentctl.py create-task --slug my-task --title "My Task"
+# backward-compatible override:
 python .codex/tools/agentctl.py create-task --task-id T001 --title "My Task"
 ```
 
@@ -53,5 +55,6 @@ python .codex/tools/agentctl.py create-task --task-id T001 --title "My Task"
 
 - `delegation-brief` 是 session wrapper，默认不作为长期对象落盘。
 - `subtask-pack` 是派生 digest，可再生；不允许引用或保留 V2 的 `task-packs/`。
+- `create-task` 支持 `--slug` 自动生成 `YYYYMMDD-HHMM[-NN]-<slug>`，并继续兼容显式 `--task-id`。
 - `create-task` 只创建 skeleton；`subtask-pack` 应在 grounded plan 存在后再刷新。
 - `plan.md` 承载 Goal truth；`workflow.md` 承载 Process truth；review 与 evidence 必须分离写入。
