@@ -13,7 +13,7 @@ Use this skill when a business/API/UI contract should be versioned and reviewed 
 ## Read first
 - current `plan.md`
 - current `workflow.md`
-- the minimum code/tests/docs that prove the contract is real
+- the code/tests/docs that prove the contract is real
 - `docs/contracts/README.md`
 
 ## Decision rule
