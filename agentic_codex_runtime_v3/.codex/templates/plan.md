@@ -29,7 +29,7 @@ updated_at: <updated-at>
 - You decide: 
 
 ## World-grounded anchors
-> 只列当前仓库里已经存在的世界锚点；不复制代码世界；不得引用当前 task 的 plan/workflow/reviews/evidence/subtask-pack 或未来输出物。
+> 只列当前仓库里已经存在的世界锚点；不复制代码世界；不得引用 `.agentdocs/*` 或当前 task 的 plan/workflow/reviews/evidence/subtask-pack 或未来输出物。
 - Code paths: 
 - Key symbols / entry points: 
 - Existing tests: 

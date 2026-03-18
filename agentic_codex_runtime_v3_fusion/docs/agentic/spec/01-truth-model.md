@@ -84,6 +84,7 @@ World-grounded anchors 必须只引用**当前仓库里已经存在的对象**�
 
 它们不得引用：
 
+- `.agentdocs/*`（agent runtime artifacts，包括 plan/workflow/reviews/evidence/packs 与派生索引）
 - 当前 task 的 `plan.md`
 - 当前 task 的 `workflow.md`
 - 当前 task 的 `reviews/*.json`

@@ -252,14 +252,20 @@ def find_subtask_blocks(plan_lines: list[str]) -> dict[str, list[str]]:
 
 
 def world_anchor_errors(task_id: str, anchors: dict[str, str]) -> list[str]:
-    blocked_prefix = f".agentdocs/tasks/{task_id}/"
     errors: list[str] = []
     for label, value in anchors.items():
         if not has_content(value):
             continue
         normalized = value.replace("\\", "/")
-        if blocked_prefix in normalized:
-            errors.append(f"world-grounded anchor '{label}' points to current task artifact: {value}")
+        # World anchors must point to world truth (code/tests/existing repo materials),
+        # not to agent runtime artifacts (plan/workflow/reviews/evidence/packs/derived indexes).
+        #
+        # We intentionally block *any* .agentdocs reference here, not only the current task,
+        # to avoid accidental authority inversion (process truth -> world truth).
+        if ".agentdocs" in normalized:
+            errors.append(
+                f"world-grounded anchor '{label}' points to agent runtime artifacts (.agentdocs), not world truth: {value}"
+            )
     return errors
 
 
@@ -358,6 +364,17 @@ def discuss_gate_errors(lines: list[str]) -> list[str]:
 
 def rewrite_agentdocs_prefix(text: str, *, src_prefix: str, dst_prefix: str) -> str:
     return text.replace(src_prefix, dst_prefix)
+
+
+def rewrite_pack_refs(packs_dir: Path, *, src_prefix: str, dst_prefix: str) -> None:
+    # Packs are derived digests. Rewriting pointers keeps them navigable after archive/reopen.
+    if not packs_dir.exists():
+        return
+    for pack_path in sorted(packs_dir.glob("*.md")):
+        text = pack_path.read_text(encoding="utf-8")
+        rewritten = rewrite_agentdocs_prefix(text, src_prefix=src_prefix, dst_prefix=dst_prefix)
+        if rewritten != text:
+            ensure_text(pack_path, rewritten)
 
 
 def remove_index_task_entries(index_text: str, task_id: str) -> str:
@@ -1104,6 +1121,12 @@ def cmd_archive(args: argparse.Namespace) -> None:
     wf_text = update_frontmatter_field(wf_text, "updated_at", now_str())
     ensure_text(archived_paths.workflow, wf_text)
 
+    rewrite_pack_refs(
+        archived_paths.packs_dir,
+        src_prefix=f".agentdocs/tasks/{task_id}/",
+        dst_prefix=f".agentdocs/archive/{task_id}/",
+    )
+
     # Update derived indexes (remove from active, add to archive).
     index_path, archive_index_path = ensure_agentdocs(repo_root)
     ensure_text(index_path, remove_index_task_entries(index_path.read_text(encoding="utf-8"), task_id))
@@ -1149,6 +1172,12 @@ def cmd_reopen(args: argparse.Namespace) -> None:
         wf_lines = replace_bullet_value(wf_lines, "Exit condition", args.reason or "Re-evaluate next gate and clear recovery")
         wf_text = "\n".join(wf_lines) + "\n"
     ensure_text(paths.workflow, wf_text)
+
+    rewrite_pack_refs(
+        paths.packs_dir,
+        src_prefix=f".agentdocs/archive/{task_id}/",
+        dst_prefix=f".agentdocs/tasks/{task_id}/",
+    )
 
     # Update derived indexes.
     index_path, archive_index_path = ensure_agentdocs(repo_root)
