@@ -37,15 +37,37 @@
 规则：
 - `plan-review` 前必须满足 Discuss readiness、plan completeness 与 fresh pack。
 - `implement` / `close-review` 前必须有 fresh pack。
+- 已经存在 pending review request 时，不得重复请求同类 review，也不得跳过 pending review 继续推进依赖它的动作。
 - `archive` 前必须所有 subtasks 都已获得 PASS close review；不能只因为最近一个 subtask 的 close review 为 PASS 就归档整个 task。
 
-## 2. write-review
+## 2. request-review
 
-用途：写入结构化 review judgment。
+用途：在 workflow 中登记一个待完成的 review 请求，并显式生成 request id。
 
 输入：
 - task id
 - review type: plan | close
+- subtask
+- optional event
+
+输出：
+- workflow update
+- request id
+
+规则：
+- `request-review` 会先通过 `check-gate` 验证当前 gate 是否允许请求该类 review。
+- 同一类 review 已存在 pending request 时，不得重复请求。
+- `plan-review` request 会把 `plan.md` frontmatter 状态同步为 `frozen`，避免主会话把旧的 `approved` / `draft` 信号误读成当前 verdict。
+
+## 3. submit-review
+
+用途：对一个已存在的 pending review request 提交结构化 review judgment。
+
+输入：
+- task id
+- review type: plan | close
+- request id
+- reviewer role: `plan_reviewer` | `close_reviewer`
 - decision: PASS | CHANGES_REQUIRED | REJECT
 - checked refs（task requirements / plan / world anchors / evidence refs）
 - coverage（task requirements / goal truth / world truth）
@@ -57,15 +79,18 @@
 - review ref（唯一文件名；同类 review 并行写入不得互相覆盖）
 
 规则：
+- 没有 pending request 时，不得直接提交 review verdict。
+- `plan` verdict 只能由 `plan_reviewer` 角色提交；`close` verdict 只能由 `close_reviewer` 角色提交。
 - review judgment 不得写入 evidence 目录。
 - close review 的 evidence refs 应指向已存在的 `evidence/*.json` 或可复核的 code/test 指针。
 - task requirements 与 Goal truth 核心约束不得标记为 sampled。
 - 若 World truth 使用抽样，必须显式写明 scope / basis / residual risk。
 - review 必须写明实际访问过的 materials。
 - plan review writeback 会同步 `plan.md` frontmatter 状态：`PASS -> approved`，`CHANGES_REQUIRED|REJECT -> needs_revision`。
+- submit 后 controller 会把对应 review request 从 `PENDING` 标记为 `RESOLVED`。
 - workflow 中记录的是“最新 review 决策 + 对应 subtask”，task 级 archive readiness 由 controller 根据全部 subtasks 的 close review 聚合计算。
 
-## 3. write-evidence
+## 4. write-evidence
 
 用途：写入结构化 process evidence。
 
@@ -82,7 +107,7 @@
 规则：
 - evidence 不得包含 review verdict。
 
-## 4. refresh-pack
+## 5. refresh-pack
 
 用途：从主真相与必要 evidence 再生 subtask pack。
 
@@ -103,7 +128,7 @@
 - pack 不是新的真相层。
 - 当 grounded plan 首次通过 `refresh-pack` 进入 reviewable 状态时，controller 会把 `plan.md` frontmatter 状态从 `draft` / `needs_revision` 同步为 `frozen`。
 
-## 5. archive
+## 6. archive
 
 用途：在 close review 通过后归档。
 
@@ -115,7 +140,7 @@
 - archive ref
 - workflow update
 
-## 6. reopen
+## 7. reopen
 
 用途：从归档或关闭状态重新打开。
 
@@ -128,7 +153,7 @@
 - workflow update
 - required next gate
 
-## 7. validate-refs
+## 8. validate-refs
 
 用途：校验 plan / workflow / review / evidence / pack 之间的引用有效性。
 
@@ -139,7 +164,7 @@
 - pass / fail
 - broken refs[]
 
-## 8. init-agentdocs
+## 9. init-agentdocs
 
 用途：初始化或补齐 `.agentdocs/` 的派生索引骨架。
 
@@ -147,7 +172,7 @@
 - ensured `.agentdocs/index.md`
 - ensured `.agentdocs/archive/index.md`
 
-## 9. create-task
+## 10. create-task
 
 用途：创建 `.agentdocs/tasks/TASK_ID/` 任务骨架。
 
@@ -166,7 +191,7 @@
 - plan.md / workflow.md / reviews/ / evidence/ / subtask-packs/
 - chosen task id
 
-## 10. sync-index
+## 11. sync-index
 
 用途：从磁盘状态再生派生索引（active / archived）。
 

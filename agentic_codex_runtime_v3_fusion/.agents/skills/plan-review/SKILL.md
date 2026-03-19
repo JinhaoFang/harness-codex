@@ -41,14 +41,21 @@ Use this skill from the `plan_reviewer` role or in an equivalent read-only revie
 - Prefer path and symbol references over vague concerns.
 
 ## Structured writeback
-Use the controller for the final judgment:
+The main agent should request the review before handing work to the reviewer:
 
 ```bash
-python .codex/tools/agentctl.py write-review   --task-id <task-id>   --subtask <subtask-id>   --review-type plan   --decision PASS|CHANGES_REQUIRED|REJECT   --plan-ref .agentdocs/tasks/<task-id>/plan.md   --task-requirement <workflow-or-user-constraint-ref>   --world-anchor <path-or-symbol>   --material-accessed <path-or-symbol>   --coverage-task-requirements FULL   --coverage-goal-truth FULL   --coverage-world-truth FULL|SAMPLED   --sampling-scope "<when sampled>"   --sampling-basis "<when sampled>"   --residual-risk "<when sampled>"   --finding type:severity:summary
+python .codex/tools/agentctl.py request-review --task-id <task-id> --review-type plan --subtask <subtask-id>
+```
+
+Then the reviewer submits the final judgment through the controller:
+
+```bash
+python .codex/tools/agentctl.py submit-review   --task-id <task-id>   --subtask <subtask-id>   --review-type plan   --request-id <request-id>   --reviewer-role plan_reviewer   --decision PASS|CHANGES_REQUIRED|REJECT   --plan-ref .agentdocs/tasks/<task-id>/plan.md   --task-requirement <workflow-or-user-constraint-ref>   --world-anchor <path-or-symbol>   --material-accessed <path-or-symbol>   --coverage-task-requirements FULL   --coverage-goal-truth FULL   --coverage-world-truth FULL|SAMPLED   --sampling-scope "<when sampled>"   --sampling-basis "<when sampled>"   --residual-risk "<when sampled>"   --finding type:severity:summary
 ```
 
 ## Do not
 - do not rewrite the plan for the author
 - do not implement code
 - do not advance workflow state by hand
+- do not let the main agent submit the reviewer verdict on your behalf
 - do not share builder long-context assumptions as evidence

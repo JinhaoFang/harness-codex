@@ -89,6 +89,8 @@ Then and only then:
   `python .codex/tools/agentctl.py update-current --task-id <task-id> --current-gate "Freeze Goal Truth" --allowed-next-action "plan-review" --active-subtask <subtask-id> --event "plan frozen after discuss summary and grounding; ready for plan review"`
 - preflight before requesting an independent plan review:
   `python .codex/tools/agentctl.py check-gate --task-id <task-id> --action plan-review`
+- request the independent review before handing work to `plan_reviewer`:
+  `python .codex/tools/agentctl.py request-review --task-id <task-id> --review-type plan --subtask <subtask-id>`
 
 ## Do not
 

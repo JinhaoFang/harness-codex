@@ -25,9 +25,16 @@ DISCUSS_READINESS_LABELS = [
     "Open questions controlled",
 ]
 REVIEW_COVERAGE_VALUES = {"FULL", "PARTIAL", "NONE", "SAMPLED"}
+REVIEW_REQUEST_STATUS_VALUES = {"NOT_REQUESTED", "PENDING", "RESOLVED"}
+PLAN_REVIEW_REQUEST_STATUS_LABEL = "Plan review request status"
+PLAN_REVIEW_REQUEST_ID_LABEL = "Plan review request id"
+PLAN_REVIEW_REQUESTED_SUBTASK_LABEL = "Plan review requested subtask"
 PLAN_REVIEW_STATUS_LABEL = "Latest plan review decision"
 LEGACY_PLAN_REVIEW_STATUS_LABEL = "Plan review"
 PLAN_REVIEW_SUBTASK_LABEL = "Plan review subtask"
+CLOSE_REVIEW_REQUEST_STATUS_LABEL = "Close review request status"
+CLOSE_REVIEW_REQUEST_ID_LABEL = "Close review request id"
+CLOSE_REVIEW_REQUESTED_SUBTASK_LABEL = "Close review requested subtask"
 CLOSE_REVIEW_STATUS_LABEL = "Latest close review decision"
 LEGACY_CLOSE_REVIEW_STATUS_LABEL = "Close review"
 CLOSE_REVIEW_SUBTASK_LABEL = "Close review subtask"
@@ -45,6 +52,10 @@ def now_str() -> str:
 
 def now_compact_precise() -> str:
     return datetime.now(TZ).strftime("%Y%m%d-%H%M%S-%f")
+
+
+def new_review_request_id(review_type: str) -> str:
+    return f"{review_type}-{now_compact_precise()}-{uuid4().hex[:8]}"
 
 
 def ensure_text(path: Path, content: str) -> None:
@@ -235,11 +246,35 @@ def review_status_labels(review_type: str) -> tuple[str, str]:
     raise SystemExit(f"BLOCK: unsupported review type: {review_type}")
 
 
+def review_request_labels(review_type: str) -> tuple[str, str, str]:
+    if review_type == "plan":
+        return (
+            PLAN_REVIEW_REQUEST_STATUS_LABEL,
+            PLAN_REVIEW_REQUEST_ID_LABEL,
+            PLAN_REVIEW_REQUESTED_SUBTASK_LABEL,
+        )
+    if review_type == "close":
+        return (
+            CLOSE_REVIEW_REQUEST_STATUS_LABEL,
+            CLOSE_REVIEW_REQUEST_ID_LABEL,
+            CLOSE_REVIEW_REQUESTED_SUBTASK_LABEL,
+        )
+    raise SystemExit(f"BLOCK: unsupported review type: {review_type}")
+
+
 def review_subtask_label(review_type: str) -> str:
     if review_type == "plan":
         return PLAN_REVIEW_SUBTASK_LABEL
     if review_type == "close":
         return CLOSE_REVIEW_SUBTASK_LABEL
+    raise SystemExit(f"BLOCK: unsupported review type: {review_type}")
+
+
+def expected_reviewer_role(review_type: str) -> str:
+    if review_type == "plan":
+        return "plan_reviewer"
+    if review_type == "close":
+        return "close_reviewer"
     raise SystemExit(f"BLOCK: unsupported review type: {review_type}")
 
 
@@ -267,6 +302,43 @@ def active_review_status_label(lines: list[str], review_type: str) -> str:
     if find_bullet_value(lines, legacy_label) is not None:
         return legacy_label
     return preferred_label
+
+
+def find_review_request_status(lines: list[str], review_type: str) -> str | None:
+    return find_bullet_value(lines, review_request_labels(review_type)[0])
+
+
+def review_request_id_value(lines: list[str], review_type: str) -> str | None:
+    return find_bullet_value(lines, review_request_labels(review_type)[1])
+
+
+def review_request_subtask_value(lines: list[str], review_type: str) -> str | None:
+    return find_bullet_value(lines, review_request_labels(review_type)[2])
+
+
+def set_review_request_state(
+    lines: list[str],
+    review_type: str,
+    *,
+    status: str,
+    request_id: str | None = None,
+    subtask_id: str | None = None,
+) -> list[str]:
+    if status not in REVIEW_REQUEST_STATUS_VALUES:
+        raise SystemExit(f"BLOCK: invalid review request status: {status}")
+    status_label, request_id_label, requested_subtask_label = review_request_labels(review_type)
+    lines = upsert_bullet_value(lines, "## Reviews", status_label, status)
+    if request_id is not None:
+        lines = upsert_bullet_value(lines, "## Reviews", request_id_label, request_id, after_label=status_label)
+    if subtask_id is not None:
+        lines = upsert_bullet_value(
+            lines,
+            "## Reviews",
+            requested_subtask_label,
+            subtask_id,
+            after_label=request_id_label,
+        )
+    return lines
 
 
 def split_external_refs(value: str | None) -> list[str]:
@@ -776,6 +848,14 @@ def render_workflow(template_root: Path, task_id: str, title: str, subtask_id: s
     lines = replace_bullet_value(lines, "Latest evidence ref", "")
     lines = replace_bullet_value(lines, "External refs", "")
     # Reviews
+    for review_type in ["plan", "close"]:
+        status_label, request_id_label, requested_subtask_label = review_request_labels(review_type)
+        if find_bullet_value(lines, status_label) is not None:
+            lines = replace_bullet_value(lines, status_label, "NOT_REQUESTED")
+        if find_bullet_value(lines, request_id_label) is not None:
+            lines = replace_bullet_value(lines, request_id_label, "")
+        if find_bullet_value(lines, requested_subtask_label) is not None:
+            lines = replace_bullet_value(lines, requested_subtask_label, "")
     if find_bullet_value(lines, PLAN_REVIEW_SUBTASK_LABEL) is not None:
         lines = replace_bullet_value(lines, PLAN_REVIEW_SUBTASK_LABEL, "")
     if find_bullet_value(lines, CLOSE_REVIEW_SUBTASK_LABEL) is not None:
@@ -832,17 +912,108 @@ def save_workflow_lines(workflow_path: Path, lines: list[str]) -> None:
     ensure_text(workflow_path, "\n".join(lines) + "\n")
 
 
-def cmd_write_review(args: argparse.Namespace) -> None:
+def cmd_request_review(args: argparse.Namespace) -> None:
     repo_root = repo_root_from_arg(args.repo_root)
-    template_root = template_root_from_arg(args.template_root)
     task_id: str = args.task_id.strip()
-    subtask_id: str = (args.subtask or "<subtask-id-or-na>").strip()
+    subtask_id: str = (args.subtask or "").strip()
     review_type: str = args.review_type
-    decision: str = args.decision
 
     paths = resolve_task_paths(repo_root, task_id, archived=False)
     if not paths.task_dir.exists():
         raise SystemExit(f"BLOCK: missing task dir: {paths.task_dir}")
+
+    requested_action = "plan-review" if review_type == "plan" else "close-review"
+    try:
+        cmd_check_gate(
+            argparse.Namespace(
+                repo_root=str(repo_root),
+                task_id=task_id,
+                action=requested_action,
+                workflow_ref=None,
+                json=False,
+            )
+        )
+    except SystemExit as e:
+        raise SystemExit(e.code)
+
+    workflow_lines = load_workflow_lines(paths.workflow)
+    request_status = (find_review_request_status(workflow_lines, review_type) or "NOT_REQUESTED").strip().upper()
+    if request_status == "PENDING":
+        existing_request_id = review_request_id_value(workflow_lines, review_type) or "<missing-request-id>"
+        raise SystemExit(
+            f"BLOCK: {review_type} review request already pending: {existing_request_id}. "
+            "Wait for the reviewer to submit a verdict before requesting another review."
+        )
+    if not subtask_id:
+        subtask_id = (
+            review_request_subtask_value(workflow_lines, review_type)
+            or find_bullet_value(workflow_lines, "Active subtask")
+            or ""
+        ).strip()
+    if not subtask_id:
+        raise SystemExit(f"BLOCK: missing subtask for {review_type} review request")
+
+    request_id = new_review_request_id(review_type)
+    workflow_lines = set_review_request_state(
+        workflow_lines,
+        review_type,
+        status="PENDING",
+        request_id=request_id,
+        subtask_id=subtask_id,
+    )
+    if review_type == "plan":
+        sync_plan_frontmatter(paths.plan, status=PLAN_STATUS_FROZEN)
+    event_message = args.event or f"{review_type} review requested for {subtask_id} ({request_id})"
+    workflow_lines = append_minimal_event(workflow_lines, event_message)
+    workflow_lines = sync_task_close_review_summary(workflow_lines, paths.plan, paths.reviews_dir)
+    workflow_lines = apply_workflow_updated_at(workflow_lines)
+    save_workflow_lines(paths.workflow, workflow_lines)
+
+    print("OK: requested review")
+    print(f"- review type: {review_type}")
+    print(f"- request id: {request_id}")
+    print(f"- subtask: {subtask_id}")
+    print(f"- expected reviewer role: {expected_reviewer_role(review_type)}")
+    print(f"- workflow updated: {paths.workflow}")
+
+
+def cmd_submit_review(args: argparse.Namespace) -> None:
+    repo_root = repo_root_from_arg(args.repo_root)
+    template_root = template_root_from_arg(args.template_root)
+    task_id: str = args.task_id.strip()
+    review_type: str = args.review_type
+    decision: str = args.decision
+    reviewer_role: str = args.reviewer_role
+    request_id: str = args.request_id.strip()
+
+    paths = resolve_task_paths(repo_root, task_id, archived=False)
+    if not paths.task_dir.exists():
+        raise SystemExit(f"BLOCK: missing task dir: {paths.task_dir}")
+
+    expected_role = expected_reviewer_role(review_type)
+    if reviewer_role != expected_role:
+        raise SystemExit(
+            f"BLOCK: {review_type} review verdict must be submitted by {expected_role}, got {reviewer_role}"
+        )
+
+    workflow_lines = load_workflow_lines(paths.workflow)
+    request_status = (find_review_request_status(workflow_lines, review_type) or "").strip().upper()
+    pending_request_id = (review_request_id_value(workflow_lines, review_type) or "").strip()
+    pending_subtask = (review_request_subtask_value(workflow_lines, review_type) or "").strip()
+    if request_status != "PENDING":
+        raise SystemExit(
+            f"BLOCK: cannot submit {review_type} review verdict without a pending review request"
+        )
+    if pending_request_id != request_id:
+        raise SystemExit(
+            f"BLOCK: review request id mismatch for {review_type} review: expected {pending_request_id or '<none>'}, got {request_id}"
+        )
+
+    subtask_id: str = (args.subtask or pending_subtask or "<subtask-id-or-na>").strip()
+    if pending_subtask and subtask_id != pending_subtask:
+        raise SystemExit(
+            f"BLOCK: {review_type} review verdict subtask mismatch: pending request is for {pending_subtask}, got {subtask_id}"
+        )
 
     task_requirements = args.task_requirements or []
     if review_type == "plan":
@@ -852,7 +1023,6 @@ def cmd_write_review(args: argparse.Namespace) -> None:
             "task_requirements": task_requirements,
             "world_anchors": args.world_anchors or [],
         }
-        reviewer = "plan_reviewer"
     else:
         template_name = "review-close.json"
         checked = {
@@ -862,14 +1032,14 @@ def cmd_write_review(args: argparse.Namespace) -> None:
             "tests": args.tests or [],
             "evidence": args.evidence_refs or [],
         }
-        reviewer = "close_reviewer"
 
     template = load_template(template_root, template_name)
     payload = json.loads(template)
     payload["task_id"] = task_id
     payload["subtask"] = subtask_id or "<subtask-id-or-na>"
     payload["decision"] = decision
-    payload["reviewer"] = reviewer
+    payload["reviewer"] = reviewer_role
+    payload["review_request_id"] = request_id
     payload["updated_at"] = now_str()
     payload["checked_against"] = checked
     default_world_coverage = "NONE"
@@ -928,7 +1098,13 @@ def cmd_write_review(args: argparse.Namespace) -> None:
 
     out_path = write_unique_json(paths.reviews_dir, [review_type, subtask_id], payload)
 
-    workflow_lines = load_workflow_lines(paths.workflow)
+    workflow_lines = set_review_request_state(
+        workflow_lines,
+        review_type,
+        status="RESOLVED",
+        request_id=request_id,
+        subtask_id=subtask_id,
+    )
     if review_type == "plan":
         workflow_lines = replace_or_upsert_review_status(workflow_lines, "plan", decision)
         workflow_lines = upsert_bullet_value(
@@ -954,8 +1130,9 @@ def cmd_write_review(args: argparse.Namespace) -> None:
     workflow_lines = apply_workflow_updated_at(workflow_lines)
     save_workflow_lines(paths.workflow, workflow_lines)
 
-    print("OK: wrote review")
+    print("OK: submitted review")
     print(f"- review: {out_path}")
+    print(f"- request id: {request_id}")
     print(f"- workflow updated: {paths.workflow}")
 
 
@@ -1151,6 +1328,12 @@ def cmd_validate_refs(args: argparse.Namespace) -> None:
             "Allowed next action",
             "Exception status",
             *DISCUSS_READINESS_LABELS,
+            PLAN_REVIEW_REQUEST_STATUS_LABEL,
+            PLAN_REVIEW_REQUEST_ID_LABEL,
+            PLAN_REVIEW_REQUESTED_SUBTASK_LABEL,
+            CLOSE_REVIEW_REQUEST_STATUS_LABEL,
+            CLOSE_REVIEW_REQUEST_ID_LABEL,
+            CLOSE_REVIEW_REQUESTED_SUBTASK_LABEL,
             "Plan doc",
             "Active subtask pack",
             "External refs",
@@ -1163,6 +1346,18 @@ def cmd_validate_refs(args: argparse.Namespace) -> None:
             broken.append("workflow missing plan review decision bullet")
         if find_review_status_value(lines, "close") is None:
             broken.append("workflow missing close review decision bullet")
+        for review_type in ["plan", "close"]:
+            status_value = (find_review_request_status(lines, review_type) or "").strip().upper()
+            request_id = (review_request_id_value(lines, review_type) or "").strip()
+            requested_subtask = (review_request_subtask_value(lines, review_type) or "").strip()
+            if status_value not in REVIEW_REQUEST_STATUS_VALUES:
+                broken.append(f"workflow invalid {review_type} review request status: {status_value or '<empty>'}")
+                continue
+            if status_value == "PENDING":
+                if not request_id:
+                    broken.append(f"workflow missing {review_type} review request id while request is pending")
+                if not requested_subtask:
+                    broken.append(f"workflow missing {review_type} review requested subtask while request is pending")
 
         for label in ["Plan doc", "Active subtask pack", "Latest evidence ref", "Latest plan review ref", "Latest close review ref"]:
             value = (find_bullet_value(lines, label) or "").strip()
@@ -1197,6 +1392,7 @@ def cmd_validate_refs(args: argparse.Namespace) -> None:
                             "subtask",
                             "review_type",
                             "decision",
+                            "review_request_id",
                             "fresh_context",
                             "checked_against",
                             "coverage",
@@ -1262,6 +1458,8 @@ def cmd_check_gate(args: argparse.Namespace) -> None:
 
     current_gate = (find_bullet_value(lines, "Current gate") or "").strip()
     allowed_next_action = (find_bullet_value(lines, "Allowed next action") or "").strip()
+    plan_review_request_status = (find_review_request_status(lines, "plan") or "NOT_REQUESTED").strip().upper()
+    close_review_request_status = (find_review_request_status(lines, "close") or "NOT_REQUESTED").strip().upper()
     plan_review = (find_review_status_value(lines, "plan") or "").strip()
     close_review = (find_review_status_value(lines, "close") or "").strip()
     latest_evidence = (find_bullet_value(lines, "Latest evidence ref") or "").strip()
@@ -1275,6 +1473,9 @@ def cmd_check_gate(args: argparse.Namespace) -> None:
         if "plan-review" not in allowed_next_action.lower():
             ok = False
             reasons.append("workflow Allowed next action must include plan-review")
+        if plan_review_request_status == "PENDING":
+            ok = False
+            reasons.append("plan review request is already pending")
         discuss_errors = discuss_gate_errors(lines)
         if discuss_errors:
             ok = False
@@ -1293,6 +1494,9 @@ def cmd_check_gate(args: argparse.Namespace) -> None:
         required_refs.append(pack_ref)
     elif action == "implement":
         required_refs.append(pack_ref)
+        if plan_review_request_status == "PENDING":
+            ok = False
+            reasons.append("cannot implement while a plan review request is pending")
         if plan_review != "PASS":
             ok = False
             reasons.append("requires the latest plan review decision to be PASS")
@@ -1303,6 +1507,12 @@ def cmd_check_gate(args: argparse.Namespace) -> None:
             ok = False
             reasons.append(f"active subtask pack is missing: {pack_ref}")
     elif action == "close-review":
+        if plan_review_request_status == "PENDING":
+            ok = False
+            reasons.append("cannot request close review while a plan review request is pending")
+        if close_review_request_status == "PENDING":
+            ok = False
+            reasons.append("close review request is already pending")
         if plan_review != "PASS":
             ok = False
             reasons.append("requires the latest plan review decision to be PASS before close review")
@@ -1317,6 +1527,9 @@ def cmd_check_gate(args: argparse.Namespace) -> None:
             reasons.append("requires at least one evidence json (latest evidence ref or evidence/*.json)")
         required_refs.append(pack_ref)
     elif action == "archive":
+        if close_review_request_status == "PENDING":
+            ok = False
+            reasons.append("cannot archive while a close review request is pending")
         pending = pending_close_review_subtasks(paths.plan, paths.reviews_dir)
         if pending:
             ok = False
@@ -1375,6 +1588,9 @@ def cmd_archive(args: argparse.Namespace) -> None:
     # Gate: require all subtasks to have PASS close reviews.
     paths = resolve_task_paths(repo_root, task_id, archived=False)
     lines = load_workflow_lines(paths.workflow)
+    close_review_request_status = (find_review_request_status(lines, "close") or "NOT_REQUESTED").strip().upper()
+    if close_review_request_status == "PENDING":
+        raise SystemExit("BLOCK: archive requires the pending close review request to be resolved first")
     pending = pending_close_review_subtasks(paths.plan, paths.reviews_dir)
     if pending:
         raise SystemExit("BLOCK: archive requires PASS close reviews for all subtasks before archive: " + ", ".join(pending))
@@ -1557,10 +1773,23 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--event", default=None)
     x.set_defaults(fn=cmd_update_current)
 
-    x = sub.add_parser("write-review", help="Write a structured review JSON and update workflow pointers")
+    x = sub.add_parser("request-review", help="Create a pending plan/close review request in workflow.md")
+    x.add_argument("--task-id", required=True)
+    x.add_argument("--review-type", choices=["plan", "close"], required=True)
+    x.add_argument("--subtask", default=None)
+    x.add_argument("--event", default=None)
+    x.set_defaults(fn=cmd_request_review)
+
+    x = sub.add_parser(
+        "submit-review",
+        aliases=["write-review"],
+        help="Submit a review verdict for an existing pending review request",
+    )
     x.add_argument("--task-id", required=True)
     x.add_argument("--subtask", default=None)
     x.add_argument("--review-type", choices=["plan", "close"], required=True)
+    x.add_argument("--request-id", required=True)
+    x.add_argument("--reviewer-role", choices=["plan_reviewer", "close_reviewer"], required=True)
     x.add_argument("--decision", choices=["PASS", "CHANGES_REQUIRED", "REJECT"], required=True)
     x.add_argument("--plan-ref", default=None)
     x.add_argument("--task-requirement", dest="task_requirements", action="append", default=[])
@@ -1577,7 +1806,7 @@ def build_parser() -> argparse.ArgumentParser:
     x.add_argument("--residual-risk", default=None)
     x.add_argument("--finding", dest="findings", action="append", default=[], help="type:severity:summary")
     x.add_argument("--required-change", dest="required_changes", action="append", default=[])
-    x.set_defaults(fn=cmd_write_review)
+    x.set_defaults(fn=cmd_submit_review)
 
     x = sub.add_parser("write-evidence", help="Write a structured evidence JSON and update workflow pointers")
     x.add_argument("--task-id", required=True)

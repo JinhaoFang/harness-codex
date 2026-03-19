@@ -26,8 +26,14 @@ updated_at: <updated-at>
 - Open questions controlled: NO
 
 ## Reviews
+- Plan review request status: NOT_REQUESTED
+- Plan review request id: 
+- Plan review requested subtask: 
 - Latest plan review decision: NOT_STARTED
 - Plan review subtask: 
+- Close review request status: NOT_REQUESTED
+- Close review request id: 
+- Close review requested subtask: 
 - Latest close review decision: NOT_STARTED
 - Close review subtask: 
 - Task close-ready: NO

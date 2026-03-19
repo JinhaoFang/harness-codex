@@ -3,6 +3,7 @@
   "subtask": "<subtask-id-or-na>",
   "review_type": "plan",
   "reviewer": "plan_reviewer",
+  "review_request_id": "<review-request-id>",
   "fresh_context": true,
   "decision": "PASS|CHANGES_REQUIRED|REJECT",
   "checked_against": {

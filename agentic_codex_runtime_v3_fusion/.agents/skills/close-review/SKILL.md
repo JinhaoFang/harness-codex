@@ -30,8 +30,14 @@ Use this skill from the `close_reviewer` role or in an equivalent read-only revi
 
 ## Structured writeback
 
+The main agent should request the review before handing work to the reviewer:
+
 ```bash
-python .codex/tools/agentctl.py write-review   --task-id <task-id>   --subtask <subtask-id>   --review-type close   --decision PASS|CHANGES_REQUIRED|REJECT   --plan-ref .agentdocs/tasks/<task-id>/plan.md   --task-requirement <workflow-or-user-constraint-ref>   --code-path <path>   --test <path>   --evidence-ref <evidence-json>   --material-accessed <path-or-symbol>   --coverage-goal-truth FULL   --coverage-world-truth FULL|SAMPLED   --sampling-scope "<when sampled>"   --sampling-basis "<when sampled>"   --residual-risk "<when sampled>"   --finding type:severity:summary
+python .codex/tools/agentctl.py request-review --task-id <task-id> --review-type close --subtask <subtask-id>
+```
+
+```bash
+python .codex/tools/agentctl.py submit-review   --task-id <task-id>   --subtask <subtask-id>   --review-type close   --request-id <request-id>   --reviewer-role close_reviewer   --decision PASS|CHANGES_REQUIRED|REJECT   --plan-ref .agentdocs/tasks/<task-id>/plan.md   --task-requirement <workflow-or-user-constraint-ref>   --code-path <path>   --test <path>   --evidence-ref <evidence-json>   --material-accessed <path-or-symbol>   --coverage-goal-truth FULL   --coverage-world-truth FULL|SAMPLED   --sampling-scope "<when sampled>"   --sampling-basis "<when sampled>"   --residual-risk "<when sampled>"   --finding type:severity:summary
 ```
 
 If the review passes, the workflow will record the latest reviewed subtask and recompute task-level `Task close-ready`.
@@ -40,4 +46,5 @@ Only when `Task close-ready = YES` may the main agent move workflow state toward
 ## Do not
 - do not fix code yourself
 - do not archive directly
+- do not let the main agent submit the reviewer verdict on your behalf
 - do not expand scope while reviewing

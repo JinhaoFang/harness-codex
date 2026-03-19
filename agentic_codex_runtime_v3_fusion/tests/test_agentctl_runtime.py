@@ -56,7 +56,7 @@ def build_complete_plan(task_id: str, title: str) -> str:
         > Only reference current repo files that already exist outside `.agentdocs/*`.
 
         - Code paths: `.codex/tools/agentctl.py`
-        - Key symbols / entry points: `cmd_refresh_pack`, `cmd_write_review`, `cmd_check_gate`, `cmd_archive`
+        - Key symbols / entry points: `cmd_refresh_pack`, `cmd_request_review`, `cmd_submit_review`, `cmd_check_gate`, `cmd_archive`
         - Existing tests: `tests/test_agentctl_runtime.py`
         - Existing docs / source materials: `README.md`, `AGENTS.md`, `docs/agentic/reference/controller-commands.md`
         - Reusable existing mechanisms: controller task skeletons, structured review JSON, workflow state updates
@@ -78,7 +78,7 @@ def build_complete_plan(task_id: str, title: str) -> str:
 
         ## Verification
 
-        - Required checks: `refresh-pack`, `check-gate`, `write-review`, `write-evidence`, `validate-refs`
+        - Required checks: `refresh-pack`, `request-review`, `submit-review`, `check-gate`, `write-evidence`, `validate-refs`
         - Evidence to collect: review JSON files, evidence JSON files, plan frontmatter, workflow summary bullets
         - Reviewer recheck focus: plan frontmatter status sync and task-level close-ready aggregation
 
@@ -153,6 +153,12 @@ class AgentctlRuntimeTests(unittest.TestCase):
                 return line.split(": ", 1)[1].strip()
         raise AssertionError(f"task id not found in output:\n{stdout}")
 
+    def parse_stdout_value(self, stdout: str, prefix: str) -> str:
+        for line in stdout.splitlines():
+            if line.startswith(prefix):
+                return line.split(": ", 1)[1].strip()
+        raise AssertionError(f"prefix not found in output ({prefix!r}):\n{stdout}")
+
     def mark_discuss_ready(self) -> None:
         args = [
             "update-current",
@@ -193,20 +199,46 @@ class AgentctlRuntimeTests(unittest.TestCase):
     def plan_text(self) -> str:
         return self.plan_path.read_text(encoding="utf-8")
 
+    def request_review(self, review_type: str, subtask: str) -> str:
+        result = self.run_cmd(
+            "request-review",
+            "--task-id",
+            self.task_id,
+            "--review-type",
+            review_type,
+            "--subtask",
+            subtask,
+        )
+        return self.parse_stdout_value(result.stdout, "- request id: ")
+
     def test_refresh_pack_freezes_plan_and_plan_review_approves_it(self) -> None:
         self.run_cmd("refresh-pack", "--task-id", self.task_id, "--subtask", "S1")
         plan_text = self.plan_text()
         self.assertIn("status: frozen", plan_text)
         self.assertNotIn(f"updated_at: {OLD_TIMESTAMP}", plan_text)
 
+        plan_request_id = self.request_review("plan", "S1")
+        workflow_text = self.workflow_text()
+        self.assertIn("Plan review request status: PENDING", workflow_text)
+        self.assertIn(f"Plan review request id: {plan_request_id}", workflow_text)
+        self.assertIn("Plan review requested subtask: S1", workflow_text)
+
+        result = self.run_cmd("check-gate", "--task-id", self.task_id, "--action", "implement", "--json", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("plan review request is pending", result.stdout)
+
         self.run_cmd(
-            "write-review",
+            "submit-review",
             "--task-id",
             self.task_id,
             "--subtask",
             "S1",
             "--review-type",
             "plan",
+            "--request-id",
+            plan_request_id,
+            "--reviewer-role",
+            "plan_reviewer",
             "--decision",
             "PASS",
             "--plan-ref",
@@ -227,20 +259,65 @@ class AgentctlRuntimeTests(unittest.TestCase):
             "other:low:test plan review",
         )
 
+        workflow_text = self.workflow_text()
+        self.assertIn("Plan review request status: RESOLVED", workflow_text)
         plan_text = self.plan_text()
         self.assertIn("status: approved", plan_text)
         self.assertNotIn(f"updated_at: {OLD_TIMESTAMP}", plan_text)
 
-    def test_archive_stays_blocked_until_all_subtasks_have_close_review_pass(self) -> None:
+    def test_submit_review_requires_pending_request(self) -> None:
         self.run_cmd("refresh-pack", "--task-id", self.task_id, "--subtask", "S1")
-        self.run_cmd(
-            "write-review",
+
+        result = self.run_cmd(
+            "submit-review",
             "--task-id",
             self.task_id,
             "--subtask",
             "S1",
             "--review-type",
             "plan",
+            "--request-id",
+            "plan-missing-request",
+            "--reviewer-role",
+            "plan_reviewer",
+            "--decision",
+            "PASS",
+            "--plan-ref",
+            f".agentdocs/tasks/{self.task_id}/plan.md",
+            "--task-requirement",
+            f".agentdocs/tasks/{self.task_id}/workflow.md",
+            "--world-anchor",
+            ".codex/tools/agentctl.py",
+            "--material-accessed",
+            ".codex/tools/agentctl.py",
+            "--coverage-task-requirements",
+            "FULL",
+            "--coverage-goal-truth",
+            "FULL",
+            "--coverage-world-truth",
+            "FULL",
+            "--finding",
+            "other:low:test missing pending request",
+            check=False,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("without a pending review request", result.stderr)
+
+    def test_archive_stays_blocked_until_all_subtasks_have_close_review_pass(self) -> None:
+        self.run_cmd("refresh-pack", "--task-id", self.task_id, "--subtask", "S1")
+        plan_request_id = self.request_review("plan", "S1")
+        self.run_cmd(
+            "submit-review",
+            "--task-id",
+            self.task_id,
+            "--subtask",
+            "S1",
+            "--review-type",
+            "plan",
+            "--request-id",
+            plan_request_id,
+            "--reviewer-role",
+            "plan_reviewer",
             "--decision",
             "PASS",
             "--plan-ref",
@@ -290,14 +367,19 @@ class AgentctlRuntimeTests(unittest.TestCase):
             "--cwd",
             ".",
         )
+        close_request_id = self.request_review("close", "S1")
         self.run_cmd(
-            "write-review",
+            "submit-review",
             "--task-id",
             self.task_id,
             "--subtask",
             "S1",
             "--review-type",
             "close",
+            "--request-id",
+            close_request_id,
+            "--reviewer-role",
+            "close_reviewer",
             "--decision",
             "PASS",
             "--plan-ref",
@@ -323,6 +405,7 @@ class AgentctlRuntimeTests(unittest.TestCase):
         )
 
         workflow_text = self.workflow_text()
+        self.assertIn("Close review request status: RESOLVED", workflow_text)
         self.assertIn("Latest close review decision: PASS", workflow_text)
         self.assertIn("Close review subtask: S1", workflow_text)
         self.assertIn("Task close-ready: NO", workflow_text)

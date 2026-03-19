@@ -5,7 +5,7 @@ controller 是 **deterministic control plane**，应当单独设计与实现，�
 本目录提供：
 
 - `docs/agentic/reference/controller-commands.md`：Fusion controller 最小命令面（规范）
-- `.codex/tools/agentctl.py`：参考实现（可在目标仓库中运行），用于一键初始化 `.agentdocs/`、创建 task 骨架、写入 review/evidence、再生 subtask pack、校验引用与归档
+- `.codex/tools/agentctl.py`：参考实现（可在目标仓库中运行），用于一键初始化 `.agentdocs/`、创建 task 骨架、请求 / 提交 review、写入 evidence、再生 subtask pack、校验引用与归档
 
 ## 职责边界
 
@@ -56,5 +56,6 @@ python .codex/tools/agentctl.py create-task --slug my-task --title "My Task"
 - `fusion` 默认使用 `--slug` 生成 `YYYYMMDD-HHMM[-NN]-<slug>`；`--task-id` 只应作为显式 override。
 - `create-task` 只创建 skeleton；`subtask-pack` 应在 grounded plan 存在后再刷新。
 - `plan.md` 承载 Goal truth；`workflow.md` 承载 Process truth；review 与 evidence 必须分离写入。
+- review verdict 必须先通过 `request-review` 进入 pending 状态，再由 reviewer 使用 `submit-review` 回写；主 agent 不得直接代替 reviewer 提交 verdict。
 - controller 会在 freeze/review 关键节点同步 `plan.md` frontmatter 状态（`draft -> frozen -> approved`，或在打回时 `needs_revision`）。
 - workflow 中的 close-review 既记录“最新 reviewed subtask”，也记录 task 级 `Task close-ready` 聚合结果；archive 只看 task 级聚合，不看单个 subtask 的 PASS。

@@ -49,6 +49,7 @@
   - 不得进入实现或 close-ready 判断
 - 在计划评审通过之前不得实施。
 - 在 task 级 `Task close-ready = YES` 之前不得归档；单个 subtask 的 close review PASS 不等于整个 task 可归档。
+- `plan-review` / `close-review` verdict 必须走 controller 的 `request-review -> submit-review` 流程；`main` 可以请求 review，但不得自己提交 reviewer verdict。
 - 保持 `plan.md` 仅关注目标事实。
 - 保持 `workflow.md` 仅关注过程事实。
 - 将评审和证据分开。
@@ -58,7 +59,7 @@
 - 不允许评审者角色修改业务代码。
 - `plan-review` 必须完整核对任务要求层与 Goal truth 核心约束；World truth 只允许在显式记录抽样范围、依据与残余风险时抽样。
 - 对迁移 / 删除 / 重组 / 重新分类类任务，review 必须回看原始 source materials，不能只看迁移后的输出物。
-- 当 explorer / plan_reviewer / close_reviewer 的结果位于当前关键路径上时，主 agent 不得在结果返回前推进依赖该结果的清理、归档或完成性判断；单次 wait 超时不等于失败，等待时间是 20 mins。
+- 当任何 subagent 的结果位于当前关键路径上时，主 agent 不得在结果返回前推进依赖该结果的清理、归档或完成性判断；默认 wait 时间是 30 mins，单次 wait 超时不等于失败。
 
 ## 最低关卡
 
@@ -67,17 +68,23 @@
 - **冻结目标事实 (Freeze Goal Truth)**：编写 `plan.md`，冻结交付物、效果、边界、不变量、验证 / 证据计划、回滚和子任务。
 - **独立评审 (Independent Review)**：使用全新上下文进行计划评审和关闭检查。
 
-## 角色
+## subagent 路由矩阵
 
-- `main`：编排、路由、决定调用哪个技能或角色，并推动任务状态流转。
-- `explorer`：收集世界立足证据，不修改业务代码。
-- `worker`：在定义的写入边界内精确实施一个子任务。
-- `plan_reviewer`：独立评估计划的可执行性和立足依据。
-- `close_reviewer`：独立评估交付就绪程度和偏差。
-- `monitor`：等待、轮询并报告长时命令或 subagent 状态，不扩展任务范围。
-- 子代理默认启用但需要显式触发；每个子代理独立执行与消耗 token。
-- 子代理继承父会话的沙箱策略；spawn 时会重新应用父会话的运行时覆盖（例如 approvals/`--yolo` 变更）。
-- 交互式 CLI 可用 `/agent` 查看与切换线程；批准请求可能从非活动线程浮出。
+- `plan_reviewer`：当 grounded plan 已准备好并需要独立 verdict 时使用；主 agent 先请求 `plan-review`，再等待 reviewer 通过 `submit-review` 回写。
+- `close_reviewer`：当实现证据已齐备并需要独立 close verdict 时使用；主 agent 先请求 `close-review`，再等待 reviewer 通过 `submit-review` 回写。
+- `explorer`：当 world grounding 跨多个入口 / 符号 / source materials，或主会话已经被探索笔记、日志、堆栈跟踪污染时优先使用。
+- `worker`：当一个 grounded subtask 的写入边界明确、实现不再是极小改动，或需要与主会话隔离实现噪音时使用。
+- 所有 subagent 默认 wait 时间是 `30 mins`。
+- 关键路径上的 subagent 未返回前，不得推进依赖该结果的下一步 gate。
+- reviewer verdict 未通过 `submit-review` 落入 workflow 前，不得把其视为已完成 review。
+
+## 可选模块激活索引
+
+- 需要外部协作镜像、issue / PR traceability 或 `gh` 交互时：启用 `github-collaboration`。
+- 需要并行执行空间、风险隔离或 reviewer 复现时：启用 `worktree-isolation`。
+- 需要跨 session 恢复、中断后重进或大上下文清理后继续时：启用 `session-recovery`。
+- 需要长期复用的业务 / API / UI 合同时：启用 `contract-artifacts`。
+- 需要 repo 级工程护栏时：启用 `.githooks/*` 与对应 CI guardrails。
 
 ## 控制器命令
 
@@ -89,9 +96,10 @@ python .codex/tools/agentctl.py create-task --slug fastapi-backend-audit --title
 # 记下 create-task 输出里的 <task-id>；正常场景优先 --slug，--task-id 只作显式 override
 python .codex/tools/agentctl.py update-current --task-id <task-id> --current-gate "Ground in World" --allowed-next-action "Freeze Goal Truth"
 python .codex/tools/agentctl.py refresh-pack --task-id <task-id> --subtask S1
+python .codex/tools/agentctl.py request-review --task-id <task-id> --review-type plan --subtask S1
+python .codex/tools/agentctl.py submit-review --task-id <task-id> --review-type plan --subtask S1 --request-id <request-id> --reviewer-role plan_reviewer --decision PASS
 python .codex/tools/agentctl.py check-gate --task-id <task-id> --action implement
 python .codex/tools/agentctl.py write-evidence --task-id <task-id> --subtask S1 --kind test --result PASS --purpose "已验证子任务" --command "<真实命令>"
-python .codex/tools/agentctl.py write-review --task-id <task-id> --subtask S1 --review-type plan --decision PASS
 python .codex/tools/agentctl.py archive --task-id <task-id>
 python .codex/tools/agentctl.py reopen --task-id <task-id> --trigger "scope-change" --reason "用户更改了验收标准"
 ```
