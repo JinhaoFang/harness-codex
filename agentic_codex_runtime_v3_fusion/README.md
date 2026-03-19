@@ -78,6 +78,9 @@
 8. `close-review`
 9. `archive`
 
+说明：
+- `close-review` 仍然按 subtask 产生 review artifact，但归档前必须由 controller 聚合得到 task 级 `Task close-ready = YES`。
+
 只有当任务确实需要时，再注入：
 - `worktree-isolation`
 - `session-recovery`

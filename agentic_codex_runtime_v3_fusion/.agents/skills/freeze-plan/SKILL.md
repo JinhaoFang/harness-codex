@@ -84,6 +84,7 @@ Then and only then:
 - save the updated `plan.md`
 - refresh the relevant subtask pack(s):
   `python .codex/tools/agentctl.py refresh-pack --task-id <task-id> --subtask <subtask-id>`
+  This transitions `plan.md` frontmatter status from `draft` / `needs_revision` to `frozen`.
 - update workflow status:
   `python .codex/tools/agentctl.py update-current --task-id <task-id> --current-gate "Freeze Goal Truth" --allowed-next-action "plan-review" --active-subtask <subtask-id> --event "plan frozen after discuss summary and grounding; ready for plan review"`
 - preflight before requesting an independent plan review:

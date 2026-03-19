@@ -56,3 +56,5 @@ python .codex/tools/agentctl.py create-task --slug my-task --title "My Task"
 - `fusion` 默认使用 `--slug` 生成 `YYYYMMDD-HHMM[-NN]-<slug>`；`--task-id` 只应作为显式 override。
 - `create-task` 只创建 skeleton；`subtask-pack` 应在 grounded plan 存在后再刷新。
 - `plan.md` 承载 Goal truth；`workflow.md` 承载 Process truth；review 与 evidence 必须分离写入。
+- controller 会在 freeze/review 关键节点同步 `plan.md` frontmatter 状态（`draft -> frozen -> approved`，或在打回时 `needs_revision`）。
+- workflow 中的 close-review 既记录“最新 reviewed subtask”，也记录 task 级 `Task close-ready` 聚合结果；archive 只看 task 级聚合，不看单个 subtask 的 PASS。

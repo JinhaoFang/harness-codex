@@ -48,7 +48,7 @@
   - 不得刷新 subtask pack 作为 review / implementation 的入口
   - 不得进入实现或 close-ready 判断
 - 在计划评审通过之前不得实施。
-- 在关闭评审通过之前不得归档。
+- 在 task 级 `Task close-ready = YES` 之前不得归档；单个 subtask 的 close review PASS 不等于整个 task 可归档。
 - 保持 `plan.md` 仅关注目标事实。
 - 保持 `workflow.md` 仅关注过程事实。
 - 将评审和证据分开。

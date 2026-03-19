@@ -25,6 +25,18 @@ DISCUSS_READINESS_LABELS = [
     "Open questions controlled",
 ]
 REVIEW_COVERAGE_VALUES = {"FULL", "PARTIAL", "NONE", "SAMPLED"}
+PLAN_REVIEW_STATUS_LABEL = "Latest plan review decision"
+LEGACY_PLAN_REVIEW_STATUS_LABEL = "Plan review"
+PLAN_REVIEW_SUBTASK_LABEL = "Plan review subtask"
+CLOSE_REVIEW_STATUS_LABEL = "Latest close review decision"
+LEGACY_CLOSE_REVIEW_STATUS_LABEL = "Close review"
+CLOSE_REVIEW_SUBTASK_LABEL = "Close review subtask"
+TASK_CLOSE_READY_LABEL = "Task close-ready"
+PENDING_CLOSE_REVIEW_SUBTASKS_LABEL = "Pending close-review subtasks"
+PLAN_STATUS_DRAFT = "draft"
+PLAN_STATUS_FROZEN = "frozen"
+PLAN_STATUS_APPROVED = "approved"
+PLAN_STATUS_NEEDS_REVISION = "needs_revision"
 
 
 def now_str() -> str:
@@ -179,6 +191,82 @@ def replace_bullet_value(lines: list[str], bullet_label: str, value: str) -> lis
     return out
 
 
+def section_bounds(lines: list[str], heading: str) -> tuple[int, int]:
+    start = None
+    for i, line in enumerate(lines):
+        if line.strip() == heading:
+            start = i + 1
+            break
+    if start is None:
+        raise SystemExit(f"BLOCK: missing section '{heading}'")
+    end = len(lines)
+    for i in range(start, len(lines)):
+        if lines[i].startswith("## "):
+            end = i
+            break
+    return start, end
+
+
+def upsert_bullet_value(lines: list[str], section_heading: str, bullet_label: str, value: str, *, after_label: str | None = None) -> list[str]:
+    pattern = re.compile(rf"^(?P<prefix>\s*-\s*{re.escape(bullet_label)}\s*:\s*).*$")
+    out = list(lines)
+    for i, line in enumerate(out):
+        if pattern.match(line):
+            out[i] = pattern.sub(lambda m: f"{m.group('prefix')}{value}", line)
+            return out
+
+    start, end = section_bounds(out, section_heading)
+    insert_at = end
+    if after_label is not None:
+        after_pattern = re.compile(rf"^\s*-\s*{re.escape(after_label)}\s*:\s*.*$")
+        for i in range(start, end):
+            if after_pattern.match(out[i]):
+                insert_at = i + 1
+                break
+    out.insert(insert_at, f"- {bullet_label}: {value}")
+    return out
+
+
+def review_status_labels(review_type: str) -> tuple[str, str]:
+    if review_type == "plan":
+        return PLAN_REVIEW_STATUS_LABEL, LEGACY_PLAN_REVIEW_STATUS_LABEL
+    if review_type == "close":
+        return CLOSE_REVIEW_STATUS_LABEL, LEGACY_CLOSE_REVIEW_STATUS_LABEL
+    raise SystemExit(f"BLOCK: unsupported review type: {review_type}")
+
+
+def review_subtask_label(review_type: str) -> str:
+    if review_type == "plan":
+        return PLAN_REVIEW_SUBTASK_LABEL
+    if review_type == "close":
+        return CLOSE_REVIEW_SUBTASK_LABEL
+    raise SystemExit(f"BLOCK: unsupported review type: {review_type}")
+
+
+def find_review_status_value(lines: list[str], review_type: str) -> str | None:
+    for label in review_status_labels(review_type):
+        value = find_bullet_value(lines, label)
+        if value is not None:
+            return value
+    return None
+
+
+def replace_or_upsert_review_status(lines: list[str], review_type: str, value: str) -> list[str]:
+    preferred_label, legacy_label = review_status_labels(review_type)
+    if find_bullet_value(lines, preferred_label) is not None:
+        return replace_bullet_value(lines, preferred_label, value)
+    if find_bullet_value(lines, legacy_label) is not None:
+        return replace_bullet_value(lines, legacy_label, value)
+    return upsert_bullet_value(lines, "## Reviews", preferred_label, value)
+
+
+def active_review_status_label(lines: list[str], review_type: str) -> str:
+    preferred_label, legacy_label = review_status_labels(review_type)
+    if find_bullet_value(lines, preferred_label) is not None:
+        return preferred_label
+    if find_bullet_value(lines, legacy_label) is not None:
+        return legacy_label
+    return preferred_label
 
 
 def split_external_refs(value: str | None) -> list[str]:
@@ -242,6 +330,10 @@ def parse_frontmatter(text: str) -> dict[str, str]:
     if not out:
         raise SystemExit("BLOCK: empty frontmatter")
     return out
+
+
+def frontmatter_value(text: str, field: str) -> str | None:
+    return parse_frontmatter(text).get(field)
 
 
 def section_slice(lines: list[str], heading: str) -> list[str]:
@@ -331,6 +423,84 @@ def world_anchor_errors(task_id: str, anchors: dict[str, str]) -> list[str]:
                 f"world-grounded anchor '{label}' points to agent runtime artifacts (.agentdocs), not world truth: {value}"
             )
     return errors
+
+
+def plan_subtask_ids(plan_path: Path) -> list[str]:
+    if not plan_path.exists():
+        return []
+    lines = plan_path.read_text(encoding="utf-8").splitlines()
+    return list(find_subtask_blocks(lines).keys())
+
+
+def latest_review_payloads_by_subtask(reviews_dir: Path, review_type: str) -> dict[str, dict]:
+    latest: dict[str, dict] = {}
+    if not reviews_dir.exists():
+        return latest
+    for review_path in sorted(reviews_dir.glob("*.json")):
+        try:
+            payload = json.loads(review_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if payload.get("review_type") != review_type:
+            continue
+        subtask = str(payload.get("subtask") or "").strip()
+        if not subtask or is_placeholder(subtask):
+            continue
+        latest[subtask] = payload
+    return latest
+
+
+def pending_close_review_subtasks(plan_path: Path, reviews_dir: Path) -> list[str]:
+    subtask_ids = plan_subtask_ids(plan_path)
+    if not subtask_ids:
+        return []
+    latest_close_reviews = latest_review_payloads_by_subtask(reviews_dir, "close")
+    return [subtask_id for subtask_id in subtask_ids if latest_close_reviews.get(subtask_id, {}).get("decision") != "PASS"]
+
+
+def sync_task_close_review_summary(lines: list[str], plan_path: Path, reviews_dir: Path) -> list[str]:
+    subtask_ids = plan_subtask_ids(plan_path)
+    pending = pending_close_review_subtasks(plan_path, reviews_dir)
+    close_ready = "YES" if subtask_ids and not pending else "NO"
+    lines = upsert_bullet_value(lines, "## Reviews", TASK_CLOSE_READY_LABEL, close_ready, after_label=review_subtask_label("close"))
+    return upsert_bullet_value(
+        lines,
+        "## Reviews",
+        PENDING_CLOSE_REVIEW_SUBTASKS_LABEL,
+        ", ".join(pending),
+        after_label=TASK_CLOSE_READY_LABEL,
+    )
+
+
+def plan_review_status_for_decision(decision: str) -> str:
+    if decision == "PASS":
+        return PLAN_STATUS_APPROVED
+    if decision in {"CHANGES_REQUIRED", "REJECT"}:
+        return PLAN_STATUS_NEEDS_REVISION
+    raise SystemExit(f"BLOCK: unsupported plan review decision: {decision}")
+
+
+def sync_plan_frontmatter(plan_path: Path, *, status: str | None = None) -> bool:
+    if not plan_path.exists():
+        raise SystemExit(f"BLOCK: missing plan: {plan_path}")
+    text = plan_path.read_text(encoding="utf-8")
+    changed = False
+    if status is not None:
+        current_status = (frontmatter_value(text, "status") or "").strip()
+        if current_status != status:
+            text = update_frontmatter_field(text, "status", status)
+            changed = True
+    if changed:
+        text = update_frontmatter_field(text, "updated_at", now_str())
+        ensure_text(plan_path, text)
+    return changed
+
+
+def freeze_plan_if_needed(plan_path: Path) -> None:
+    text = plan_path.read_text(encoding="utf-8")
+    current_status = (frontmatter_value(text, "status") or "").strip().lower()
+    if current_status in {"", PLAN_STATUS_DRAFT, PLAN_STATUS_NEEDS_REVISION}:
+        sync_plan_frontmatter(plan_path, status=PLAN_STATUS_FROZEN)
 
 
 def plan_gate_errors(plan_path: Path, task_id: str) -> list[str]:
@@ -606,6 +776,14 @@ def render_workflow(template_root: Path, task_id: str, title: str, subtask_id: s
     lines = replace_bullet_value(lines, "Latest evidence ref", "")
     lines = replace_bullet_value(lines, "External refs", "")
     # Reviews
+    if find_bullet_value(lines, PLAN_REVIEW_SUBTASK_LABEL) is not None:
+        lines = replace_bullet_value(lines, PLAN_REVIEW_SUBTASK_LABEL, "")
+    if find_bullet_value(lines, CLOSE_REVIEW_SUBTASK_LABEL) is not None:
+        lines = replace_bullet_value(lines, CLOSE_REVIEW_SUBTASK_LABEL, "")
+    if find_bullet_value(lines, TASK_CLOSE_READY_LABEL) is not None:
+        lines = replace_bullet_value(lines, TASK_CLOSE_READY_LABEL, "NO")
+    if find_bullet_value(lines, PENDING_CLOSE_REVIEW_SUBTASKS_LABEL) is not None:
+        lines = replace_bullet_value(lines, PENDING_CLOSE_REVIEW_SUBTASKS_LABEL, "")
     lines = replace_bullet_value(lines, "Latest plan review ref", "")
     lines = replace_bullet_value(lines, "Latest close review ref", "")
     return "\n".join(lines) + "\n"
@@ -667,7 +845,6 @@ def cmd_write_review(args: argparse.Namespace) -> None:
         raise SystemExit(f"BLOCK: missing task dir: {paths.task_dir}")
 
     task_requirements = args.task_requirements or []
-
     if review_type == "plan":
         template_name = "review-plan.json"
         checked = {
@@ -753,11 +930,27 @@ def cmd_write_review(args: argparse.Namespace) -> None:
 
     workflow_lines = load_workflow_lines(paths.workflow)
     if review_type == "plan":
-        workflow_lines = replace_bullet_value(workflow_lines, "Plan review", decision)
+        workflow_lines = replace_or_upsert_review_status(workflow_lines, "plan", decision)
+        workflow_lines = upsert_bullet_value(
+            workflow_lines,
+            "## Reviews",
+            review_subtask_label("plan"),
+            subtask_id,
+            after_label=active_review_status_label(workflow_lines, "plan"),
+        )
         workflow_lines = replace_bullet_value(workflow_lines, "Latest plan review ref", str(rel_path(repo_root, out_path)))
+        sync_plan_frontmatter(paths.plan, status=plan_review_status_for_decision(decision))
     else:
-        workflow_lines = replace_bullet_value(workflow_lines, "Close review", decision)
+        workflow_lines = replace_or_upsert_review_status(workflow_lines, "close", decision)
+        workflow_lines = upsert_bullet_value(
+            workflow_lines,
+            "## Reviews",
+            review_subtask_label("close"),
+            subtask_id,
+            after_label=active_review_status_label(workflow_lines, "close"),
+        )
         workflow_lines = replace_bullet_value(workflow_lines, "Latest close review ref", str(rel_path(repo_root, out_path)))
+    workflow_lines = sync_task_close_review_summary(workflow_lines, paths.plan, paths.reviews_dir)
     workflow_lines = apply_workflow_updated_at(workflow_lines)
     save_workflow_lines(paths.workflow, workflow_lines)
 
@@ -832,6 +1025,7 @@ def cmd_refresh_pack(args: argparse.Namespace) -> None:
     plan_errors = plan_gate_errors(plan_path, task_id)
     if plan_errors:
         raise SystemExit("BLOCK: cannot refresh pack before grounded plan is complete:\n- " + "\n- ".join(plan_errors))
+    freeze_plan_if_needed(plan_path)
     plan_lines = plan_path.read_text(encoding="utf-8").splitlines()
     workflow_lines = load_workflow_lines(workflow_path)
 
@@ -911,6 +1105,7 @@ def cmd_refresh_pack(args: argparse.Namespace) -> None:
 
     workflow_lines = load_workflow_lines(paths.workflow)
     workflow_lines = replace_bullet_value(workflow_lines, "Active subtask pack", str(rel_path(repo_root, out)))
+    workflow_lines = sync_task_close_review_summary(workflow_lines, paths.plan, paths.reviews_dir)
     workflow_lines = apply_workflow_updated_at(workflow_lines)
     save_workflow_lines(paths.workflow, workflow_lines)
 
@@ -956,8 +1151,6 @@ def cmd_validate_refs(args: argparse.Namespace) -> None:
             "Allowed next action",
             "Exception status",
             *DISCUSS_READINESS_LABELS,
-            "Plan review",
-            "Close review",
             "Plan doc",
             "Active subtask pack",
             "External refs",
@@ -966,6 +1159,10 @@ def cmd_validate_refs(args: argparse.Namespace) -> None:
             value = find_bullet_value(lines, label)
             if value is None:
                 broken.append(f"workflow missing bullet: {label}")
+        if find_review_status_value(lines, "plan") is None:
+            broken.append("workflow missing plan review decision bullet")
+        if find_review_status_value(lines, "close") is None:
+            broken.append("workflow missing close review decision bullet")
 
         for label in ["Plan doc", "Active subtask pack", "Latest evidence ref", "Latest plan review ref", "Latest close review ref"]:
             value = (find_bullet_value(lines, label) or "").strip()
@@ -1065,8 +1262,8 @@ def cmd_check_gate(args: argparse.Namespace) -> None:
 
     current_gate = (find_bullet_value(lines, "Current gate") or "").strip()
     allowed_next_action = (find_bullet_value(lines, "Allowed next action") or "").strip()
-    plan_review = (find_bullet_value(lines, "Plan review") or "").strip()
-    close_review = (find_bullet_value(lines, "Close review") or "").strip()
+    plan_review = (find_review_status_value(lines, "plan") or "").strip()
+    close_review = (find_review_status_value(lines, "close") or "").strip()
     latest_evidence = (find_bullet_value(lines, "Latest evidence ref") or "").strip()
     pack_ref = (find_bullet_value(lines, "Active subtask pack") or "").strip()
 
@@ -1098,7 +1295,7 @@ def cmd_check_gate(args: argparse.Namespace) -> None:
         required_refs.append(pack_ref)
         if plan_review != "PASS":
             ok = False
-            reasons.append("requires Plan review = PASS")
+            reasons.append("requires the latest plan review decision to be PASS")
         if not pack_ref:
             ok = False
             reasons.append("requires a refreshed active subtask pack before implement")
@@ -1108,7 +1305,7 @@ def cmd_check_gate(args: argparse.Namespace) -> None:
     elif action == "close-review":
         if plan_review != "PASS":
             ok = False
-            reasons.append("requires Plan review = PASS before close review")
+            reasons.append("requires the latest plan review decision to be PASS before close review")
         if not pack_ref:
             ok = False
             reasons.append("requires a refreshed active subtask pack before close review")
@@ -1120,9 +1317,17 @@ def cmd_check_gate(args: argparse.Namespace) -> None:
             reasons.append("requires at least one evidence json (latest evidence ref or evidence/*.json)")
         required_refs.append(pack_ref)
     elif action == "archive":
-        if close_review != "PASS":
+        pending = pending_close_review_subtasks(paths.plan, paths.reviews_dir)
+        if pending:
             ok = False
-            reasons.append("requires Close review = PASS")
+            reasons.append("requires PASS close reviews for all subtasks before archive: pending " + ", ".join(pending))
+        task_close_ready = (find_bullet_value(lines, TASK_CLOSE_READY_LABEL) or "").strip()
+        if task_close_ready and task_close_ready != "YES":
+            ok = False
+            reasons.append(f"workflow {TASK_CLOSE_READY_LABEL} must be YES before archive")
+        if close_review != "PASS" and not pending:
+            ok = False
+            reasons.append("requires the latest close review decision to be PASS before archive")
 
     # validate-refs is a general preflight for all actions
     try:
@@ -1167,12 +1372,18 @@ def cmd_archive(args: argparse.Namespace) -> None:
     if dst.exists() and any(dst.iterdir()) and not args.force:
         raise SystemExit(f"BLOCK: archive dir exists and non-empty: {dst} (use --force)")
 
-    # Gate: require close review PASS.
+    # Gate: require all subtasks to have PASS close reviews.
     paths = resolve_task_paths(repo_root, task_id, archived=False)
     lines = load_workflow_lines(paths.workflow)
-    close_review = (find_bullet_value(lines, "Close review") or "").strip()
+    pending = pending_close_review_subtasks(paths.plan, paths.reviews_dir)
+    if pending:
+        raise SystemExit("BLOCK: archive requires PASS close reviews for all subtasks before archive: " + ", ".join(pending))
+    close_review = (find_review_status_value(lines, "close") or "").strip()
     if close_review != "PASS":
-        raise SystemExit("BLOCK: archive requires Close review = PASS in workflow.md")
+        raise SystemExit("BLOCK: archive requires the latest close review decision to be PASS in workflow.md")
+    task_close_ready = (find_bullet_value(lines, TASK_CLOSE_READY_LABEL) or "").strip()
+    if task_close_ready and task_close_ready != "YES":
+        raise SystemExit(f"BLOCK: archive requires {TASK_CLOSE_READY_LABEL} = YES in workflow.md")
     recovery_needed = (find_bullet_value(lines, "Recovery needed") or "NO").strip()
     if recovery_needed not in {"NO", "No", "false", "FALSE"}:
         raise SystemExit("BLOCK: archive requires Recovery needed = NO in workflow.md")
@@ -1305,6 +1516,8 @@ def cmd_update_current(args: argparse.Namespace) -> None:
         lines = replace_bullet_value(lines, label.strip(), value.strip())
     if args.event:
         lines = append_minimal_event(lines, args.event)
+    if paths.plan.exists():
+        lines = sync_task_close_review_summary(lines, paths.plan, paths.reviews_dir)
     lines = apply_workflow_updated_at(lines)
     save_workflow_lines(paths.workflow, lines)
 

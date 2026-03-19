@@ -17,6 +17,9 @@
 输出：
 - workflow update
 
+规则：
+- 当 `plan.md` 与 review artifacts 已存在时，controller 会同时重算 task 级 `Task close-ready` / `Pending close-review subtasks` 摘要，避免 workflow 脱离真实 review 进度。
+
 ## 1. check-gate
 
 用途：检查当前 gate 是否允许进入下一步。
@@ -34,6 +37,7 @@
 规则：
 - `plan-review` 前必须满足 Discuss readiness、plan completeness 与 fresh pack。
 - `implement` / `close-review` 前必须有 fresh pack。
+- `archive` 前必须所有 subtasks 都已获得 PASS close review；不能只因为最近一个 subtask 的 close review 为 PASS 就归档整个 task。
 
 ## 2. write-review
 
@@ -58,6 +62,8 @@
 - task requirements 与 Goal truth 核心约束不得标记为 sampled。
 - 若 World truth 使用抽样，必须显式写明 scope / basis / residual risk。
 - review 必须写明实际访问过的 materials。
+- plan review writeback 会同步 `plan.md` frontmatter 状态：`PASS -> approved`，`CHANGES_REQUIRED|REJECT -> needs_revision`。
+- workflow 中记录的是“最新 review 决策 + 对应 subtask”，task 级 archive readiness 由 controller 根据全部 subtasks 的 close review 聚合计算。
 
 ## 3. write-evidence
 
@@ -95,13 +101,14 @@
 - pack 应保留当前 objective、verification、evidence plan 与 reviewer focus 的最小必要信息。
 - pack 只在 grounded plan 存在后生成；初始 create-task 不自动生成空 pack。
 - pack 不是新的真相层。
+- 当 grounded plan 首次通过 `refresh-pack` 进入 reviewable 状态时，controller 会把 `plan.md` frontmatter 状态从 `draft` / `needs_revision` 同步为 `frozen`。
 
 ## 5. archive
 
 用途：在 close review 通过后归档。
 
 前置条件：
-- Close review = PASS
+- workflow `Task close-ready = YES`
 - workflow 中 `Recovery needed = NO`
 
 输出：

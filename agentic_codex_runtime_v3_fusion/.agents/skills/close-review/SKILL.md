@@ -34,7 +34,8 @@ Use this skill from the `close_reviewer` role or in an equivalent read-only revi
 python .codex/tools/agentctl.py write-review   --task-id <task-id>   --subtask <subtask-id>   --review-type close   --decision PASS|CHANGES_REQUIRED|REJECT   --plan-ref .agentdocs/tasks/<task-id>/plan.md   --task-requirement <workflow-or-user-constraint-ref>   --code-path <path>   --test <path>   --evidence-ref <evidence-json>   --material-accessed <path-or-symbol>   --coverage-goal-truth FULL   --coverage-world-truth FULL|SAMPLED   --sampling-scope "<when sampled>"   --sampling-basis "<when sampled>"   --residual-risk "<when sampled>"   --finding type:severity:summary
 ```
 
-If the review passes, the main agent may move workflow state toward archive and then archive the task.
+If the review passes, the workflow will record the latest reviewed subtask and recompute task-level `Task close-ready`.
+Only when `Task close-ready = YES` may the main agent move workflow state toward archive and archive the task.
 
 ## Do not
 - do not fix code yourself
