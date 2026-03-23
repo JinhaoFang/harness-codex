@@ -44,6 +44,14 @@ PLAN_STATUS_DRAFT = "draft"
 PLAN_STATUS_FROZEN = "frozen"
 PLAN_STATUS_APPROVED = "approved"
 PLAN_STATUS_NEEDS_REVISION = "needs_revision"
+PACK_TASK_TITLE_LABEL = "Task title"
+PACK_PLAN_STATUS_LABEL = "Plan status"
+PACK_WORKFLOW_STATUS_LABEL = "Workflow status"
+PACK_PLAN_UPDATED_AT_LABEL = "Plan updated at"
+PACK_WORKFLOW_UPDATED_AT_LABEL = "Workflow updated at"
+PACK_LATEST_EVIDENCE_REF_LABEL = "Latest evidence ref"
+PACK_LATEST_PLAN_REVIEW_REF_LABEL = "Latest plan review ref"
+PACK_LATEST_CLOSE_REVIEW_REF_LABEL = "Latest close review ref"
 
 
 def now_str() -> str:
@@ -387,6 +395,14 @@ def status_counts_as_ready(value: str | None) -> bool:
     return raw in {"YES", "N/A", "NA"}
 
 
+def workflow_pack_marker_values(lines: list[str]) -> dict[str, str]:
+    return {
+        PACK_LATEST_EVIDENCE_REF_LABEL: (find_bullet_value(lines, "Latest evidence ref") or "").strip(),
+        PACK_LATEST_PLAN_REVIEW_REF_LABEL: (find_bullet_value(lines, "Latest plan review ref") or "").strip(),
+        PACK_LATEST_CLOSE_REVIEW_REF_LABEL: (find_bullet_value(lines, "Latest close review ref") or "").strip(),
+    }
+
+
 def parse_frontmatter(text: str) -> dict[str, str]:
     lines = text.splitlines()
     if not (lines and lines[0].strip() == "---"):
@@ -406,6 +422,53 @@ def parse_frontmatter(text: str) -> dict[str, str]:
 
 def frontmatter_value(text: str, field: str) -> str | None:
     return parse_frontmatter(text).get(field)
+
+
+def normalized_metadata_value(value: str | None) -> str:
+    raw = (value or "").strip()
+    if not raw or is_placeholder(raw):
+        return ""
+    return raw
+
+
+def markdown_title_heading(text: str, heading_label: str) -> str | None:
+    match = re.search(rf"^#\s+{re.escape(heading_label)}:\s*(.*?)\s*$", text, flags=re.MULTILINE)
+    if not match:
+        return None
+    return match.group(1).strip()
+
+
+def sync_markdown_title_heading(text: str, *, heading_label: str, title: str) -> str:
+    desired = f"# {heading_label}: {title}"
+    pattern = re.compile(rf"^#\s+{re.escape(heading_label)}:\s*.*$", flags=re.MULTILINE)
+    if not pattern.search(text):
+        raise SystemExit(f"BLOCK: missing heading '# {heading_label}: ...'")
+    return pattern.sub(desired, text, count=1)
+
+
+def canonical_task_title(plan_text: str | None, workflow_text: str | None) -> str:
+    for candidate in [
+        normalized_metadata_value(frontmatter_value(plan_text, "title") if plan_text else None),
+        normalized_metadata_value(frontmatter_value(workflow_text, "title") if workflow_text else None),
+    ]:
+        if candidate:
+            return candidate
+    return ""
+
+
+def expected_workflow_status(*, archived: bool) -> str:
+    return "archived" if archived else "active"
+
+
+def pack_metadata_values(plan_text: str, workflow_text: str, workflow_lines: list[str], *, archived: bool) -> dict[str, str]:
+    return {
+        PACK_TASK_TITLE_LABEL: canonical_task_title(plan_text, workflow_text),
+        PACK_PLAN_STATUS_LABEL: (frontmatter_value(plan_text, "status") or "").strip(),
+        PACK_WORKFLOW_STATUS_LABEL: (frontmatter_value(workflow_text, "status") or expected_workflow_status(archived=archived)).strip(),
+        PACK_PLAN_UPDATED_AT_LABEL: (frontmatter_value(plan_text, "updated_at") or "").strip(),
+        PACK_WORKFLOW_UPDATED_AT_LABEL: (frontmatter_value(workflow_text, "updated_at") or "").strip(),
+        **workflow_pack_marker_values(workflow_lines),
+    }
 
 
 def section_slice(lines: list[str], heading: str) -> list[str]:
@@ -591,7 +654,7 @@ def plan_gate_errors(plan_path: Path, task_id: str) -> list[str]:
 
     errors: list[str] = []
 
-    for label in ["Problem", "Goal", "Deliverable", "Why now"]:
+    for label in ["Problem", "Goal", "Deliverable", "Observable effect", "Demo sentence of success", "Why now"]:
         if not has_content(goal.get(label)):
             errors.append(f"plan missing Goal/{label}")
     if not any(has_content(line.split(":", 1)[1] if ":" in line else line[2:]) for line in section_slice(lines, "## Non-goals") if line.strip().startswith("-")):
@@ -599,6 +662,7 @@ def plan_gate_errors(plan_path: Path, task_id: str) -> list[str]:
     for label in [
         "Success criteria",
         "User-visible acceptance signal",
+        "Terminal completion definition",
         "Out-of-scope guardrail",
         "Not acceptable completion definitions",
     ]:
@@ -912,6 +976,40 @@ def save_workflow_lines(workflow_path: Path, lines: list[str]) -> None:
     ensure_text(workflow_path, "\n".join(lines) + "\n")
 
 
+def sync_task_metadata(paths: TaskPaths, *, archived: bool) -> None:
+    if paths.plan.exists():
+        plan_text = paths.plan.read_text(encoding="utf-8")
+        plan_title = normalized_metadata_value(frontmatter_value(plan_text, "title"))
+        desired_plan_heading = plan_title or markdown_title_heading(plan_text, "Plan") or "<task-title>"
+        updated_plan_text = sync_markdown_title_heading(plan_text, heading_label="Plan", title=desired_plan_heading)
+        if updated_plan_text != plan_text:
+            updated_plan_text = update_frontmatter_field(updated_plan_text, "updated_at", now_str())
+            ensure_text(paths.plan, updated_plan_text)
+
+    workflow_text = paths.workflow.read_text(encoding="utf-8")
+    canonical_title = canonical_task_title(
+        paths.plan.read_text(encoding="utf-8") if paths.plan.exists() else None,
+        workflow_text,
+    )
+    current_workflow_title = normalized_metadata_value(frontmatter_value(workflow_text, "title"))
+    desired_workflow_title = canonical_title or current_workflow_title or markdown_title_heading(workflow_text, "Workflow") or "<task-title>"
+    desired_workflow_status = expected_workflow_status(archived=archived)
+
+    updated_workflow_text = workflow_text
+    if current_workflow_title != desired_workflow_title:
+        updated_workflow_text = update_frontmatter_field(updated_workflow_text, "title", desired_workflow_title)
+    updated_workflow_text = sync_markdown_title_heading(
+        updated_workflow_text,
+        heading_label="Workflow",
+        title=desired_workflow_title,
+    )
+    if (frontmatter_value(updated_workflow_text, "status") or "").strip() != desired_workflow_status:
+        updated_workflow_text = update_frontmatter_field(updated_workflow_text, "status", desired_workflow_status)
+    if updated_workflow_text != workflow_text:
+        updated_workflow_text = update_frontmatter_field(updated_workflow_text, "updated_at", now_str())
+        ensure_text(paths.workflow, updated_workflow_text)
+
+
 def cmd_request_review(args: argparse.Namespace) -> None:
     repo_root = repo_root_from_arg(args.repo_root)
     task_id: str = args.task_id.strip()
@@ -921,6 +1019,7 @@ def cmd_request_review(args: argparse.Namespace) -> None:
     paths = resolve_task_paths(repo_root, task_id, archived=False)
     if not paths.task_dir.exists():
         raise SystemExit(f"BLOCK: missing task dir: {paths.task_dir}")
+    sync_task_metadata(paths, archived=False)
 
     requested_action = "plan-review" if review_type == "plan" else "close-review"
     try:
@@ -989,6 +1088,7 @@ def cmd_submit_review(args: argparse.Namespace) -> None:
     paths = resolve_task_paths(repo_root, task_id, archived=False)
     if not paths.task_dir.exists():
         raise SystemExit(f"BLOCK: missing task dir: {paths.task_dir}")
+    sync_task_metadata(paths, archived=False)
 
     expected_role = expected_reviewer_role(review_type)
     if reviewer_role != expected_role:
@@ -1158,6 +1258,7 @@ def cmd_write_evidence(args: argparse.Namespace) -> None:
     paths = resolve_task_paths(repo_root, task_id, archived=False)
     if not paths.task_dir.exists():
         raise SystemExit(f"BLOCK: missing task dir: {paths.task_dir}")
+    sync_task_metadata(paths, archived=False)
 
     template = load_template(template_root, "evidence.json")
     payload = json.loads(template)
@@ -1203,8 +1304,15 @@ def cmd_refresh_pack(args: argparse.Namespace) -> None:
     if plan_errors:
         raise SystemExit("BLOCK: cannot refresh pack before grounded plan is complete:\n- " + "\n- ".join(plan_errors))
     freeze_plan_if_needed(plan_path)
-    plan_lines = plan_path.read_text(encoding="utf-8").splitlines()
+    sync_task_metadata(paths, archived=False)
+    plan_text = plan_path.read_text(encoding="utf-8")
+    plan_lines = plan_text.splitlines()
     workflow_lines = load_workflow_lines(workflow_path)
+    workflow_lines = replace_bullet_value(workflow_lines, "Active subtask pack", str(rel_path(repo_root, out)))
+    workflow_lines = sync_task_close_review_summary(workflow_lines, paths.plan, paths.reviews_dir)
+    workflow_lines = apply_workflow_updated_at(workflow_lines)
+    workflow_text = "\n".join(workflow_lines) + "\n"
+    pack_metadata = pack_metadata_values(plan_text, workflow_text, workflow_lines, archived=False)
 
     plan_goal = bullets_to_map(section_slice(plan_lines, "## Goal"))
     plan_acceptance = bullets_to_map(section_slice(plan_lines, "## Acceptance"))
@@ -1224,8 +1332,13 @@ def cmd_refresh_pack(args: argparse.Namespace) -> None:
         lines = replace_bullet_value(lines, label, value)
 
     set_field("Task ID", task_id)
+    set_field(PACK_TASK_TITLE_LABEL, pack_metadata[PACK_TASK_TITLE_LABEL])
     set_field("Subtask ID", subtask_id)
     set_field("Generated at", now_str())
+    set_field(PACK_PLAN_STATUS_LABEL, pack_metadata[PACK_PLAN_STATUS_LABEL])
+    set_field(PACK_WORKFLOW_STATUS_LABEL, pack_metadata[PACK_WORKFLOW_STATUS_LABEL])
+    set_field(PACK_PLAN_UPDATED_AT_LABEL, pack_metadata[PACK_PLAN_UPDATED_AT_LABEL])
+    set_field(PACK_WORKFLOW_UPDATED_AT_LABEL, pack_metadata[PACK_WORKFLOW_UPDATED_AT_LABEL])
 
     # Objective
     goal_value = subtask_fields.get("Goal") or plan_goal.get("Deliverable") or plan_goal.get("Goal") or ""
@@ -1257,6 +1370,9 @@ def cmd_refresh_pack(args: argparse.Namespace) -> None:
     set_field("Source materials", plan_anchors.get("Existing docs / source materials") or "")
     set_field("Reusable mechanisms", plan_anchors.get("Reusable existing mechanisms") or "")
     set_field("External refs", find_bullet_value(workflow_lines, "External refs") or "")
+    set_field(PACK_LATEST_EVIDENCE_REF_LABEL, pack_metadata[PACK_LATEST_EVIDENCE_REF_LABEL])
+    set_field(PACK_LATEST_PLAN_REVIEW_REF_LABEL, pack_metadata[PACK_LATEST_PLAN_REVIEW_REF_LABEL])
+    set_field(PACK_LATEST_CLOSE_REVIEW_REF_LABEL, pack_metadata[PACK_LATEST_CLOSE_REVIEW_REF_LABEL])
 
     # Checks
     required_verification = subtask_fields.get("Verify") or plan_verification.get("Required checks") or ""
@@ -1279,16 +1395,33 @@ def cmd_refresh_pack(args: argparse.Namespace) -> None:
 
 
     ensure_text(out, "\n".join(lines) + "\n")
-
-    workflow_lines = load_workflow_lines(paths.workflow)
-    workflow_lines = replace_bullet_value(workflow_lines, "Active subtask pack", str(rel_path(repo_root, out)))
-    workflow_lines = sync_task_close_review_summary(workflow_lines, paths.plan, paths.reviews_dir)
-    workflow_lines = apply_workflow_updated_at(workflow_lines)
     save_workflow_lines(paths.workflow, workflow_lines)
 
     print("OK: refreshed pack")
     print(f"- pack: {out}")
     print(f"- workflow updated: {paths.workflow}")
+
+
+def pack_freshness_errors(repo_root: Path, pack_ref: str, plan_path: Path, workflow_path: Path) -> list[str]:
+    pack_path = (repo_root / pack_ref) if not Path(pack_ref).is_absolute() else Path(pack_ref)
+    if not pack_path.exists():
+        return [f"active subtask pack is missing: {pack_ref}"]
+
+    pack_lines = pack_path.read_text(encoding="utf-8").splitlines()
+    plan_text = plan_path.read_text(encoding="utf-8")
+    workflow_text = workflow_path.read_text(encoding="utf-8")
+    workflow_lines = workflow_text.splitlines()
+    expected = pack_metadata_values(plan_text, workflow_text, workflow_lines, archived=False)
+
+    errors: list[str] = []
+    for label, expected_value in expected.items():
+        actual_value = (find_bullet_value(pack_lines, label) or "").strip()
+        if actual_value != expected_value:
+            errors.append(
+                f"active subtask pack is stale for {label}: "
+                f"expected {expected_value or '<empty>'}, got {actual_value or '<empty>'}"
+            )
+    return errors
 
 
 def cmd_validate_refs(args: argparse.Namespace) -> None:
@@ -1297,6 +1430,8 @@ def cmd_validate_refs(args: argparse.Namespace) -> None:
     paths = resolve_task_paths(repo_root, task_id, archived=args.archived)
 
     broken: list[str] = []
+    plan_text = paths.plan.read_text(encoding="utf-8") if paths.plan.exists() else ""
+    plan_title = ""
 
     for required in [paths.plan, paths.workflow]:
         if not required.exists():
@@ -1304,11 +1439,17 @@ def cmd_validate_refs(args: argparse.Namespace) -> None:
 
     if paths.plan.exists():
         try:
-            fm = parse_frontmatter(paths.plan.read_text(encoding="utf-8"))
+            fm = parse_frontmatter(plan_text)
             if fm.get("task_id") != task_id:
                 broken.append(f"plan frontmatter task_id mismatch: {fm.get('task_id')} (expected {task_id})")
             if not fm.get("title") or is_placeholder(fm.get("title", "")):
                 broken.append("plan frontmatter title is placeholder/empty")
+            plan_title = (fm.get("title") or "").strip()
+            plan_heading = markdown_title_heading(plan_text, "Plan")
+            if plan_heading is None:
+                broken.append("plan missing title heading")
+            elif plan_heading != plan_title:
+                broken.append(f"plan heading title mismatch: {plan_heading} (expected {plan_title})")
         except SystemExit as e:
             broken.append(f"plan frontmatter invalid: {e}")
 
@@ -1318,6 +1459,20 @@ def cmd_validate_refs(args: argparse.Namespace) -> None:
             wf_fm = parse_frontmatter(wf_text)
             if wf_fm.get("task_id") != task_id:
                 broken.append(f"workflow frontmatter task_id mismatch: {wf_fm.get('task_id')} (expected {task_id})")
+            wf_title = (wf_fm.get("title") or "").strip()
+            if not wf_title or is_placeholder(wf_title):
+                broken.append("workflow frontmatter title is placeholder/empty")
+            if plan_title and wf_title and wf_title != plan_title:
+                broken.append(f"workflow title mismatch: {wf_title} (expected {plan_title})")
+            wf_heading = markdown_title_heading(wf_text, "Workflow")
+            if wf_heading is None:
+                broken.append("workflow missing title heading")
+            elif wf_heading != wf_title:
+                broken.append(f"workflow heading title mismatch: {wf_heading} (expected {wf_title})")
+            wf_status = (wf_fm.get("status") or "").strip()
+            expected_status = expected_workflow_status(archived=args.archived)
+            if wf_status != expected_status:
+                broken.append(f"workflow status mismatch: {wf_status or '<empty>'} (expected {expected_status})")
         except SystemExit as e:
             broken.append(f"workflow frontmatter invalid: {e}")
 
@@ -1487,9 +1642,11 @@ def cmd_check_gate(args: argparse.Namespace) -> None:
         if not pack_ref:
             ok = False
             reasons.append("requires a refreshed active subtask pack before plan-review")
-        elif not (repo_root / pack_ref).exists():
-            ok = False
-            reasons.append(f"active subtask pack is missing: {pack_ref}")
+        else:
+            freshness_errors = pack_freshness_errors(repo_root, pack_ref, paths.plan, workflow_path)
+            if freshness_errors:
+                ok = False
+                reasons.extend(freshness_errors)
         required_refs.append(rel_path(repo_root, paths.plan))
         required_refs.append(pack_ref)
     elif action == "implement":
@@ -1503,9 +1660,11 @@ def cmd_check_gate(args: argparse.Namespace) -> None:
         if not pack_ref:
             ok = False
             reasons.append("requires a refreshed active subtask pack before implement")
-        elif not (repo_root / pack_ref).exists():
-            ok = False
-            reasons.append(f"active subtask pack is missing: {pack_ref}")
+        else:
+            freshness_errors = pack_freshness_errors(repo_root, pack_ref, paths.plan, workflow_path)
+            if freshness_errors:
+                ok = False
+                reasons.extend(freshness_errors)
     elif action == "close-review":
         if plan_review_request_status == "PENDING":
             ok = False
@@ -1519,9 +1678,11 @@ def cmd_check_gate(args: argparse.Namespace) -> None:
         if not pack_ref:
             ok = False
             reasons.append("requires a refreshed active subtask pack before close review")
-        elif not (repo_root / pack_ref).exists():
-            ok = False
-            reasons.append(f"active subtask pack is missing: {pack_ref}")
+        else:
+            freshness_errors = pack_freshness_errors(repo_root, pack_ref, paths.plan, workflow_path)
+            if freshness_errors:
+                ok = False
+                reasons.extend(freshness_errors)
         if not latest_evidence and not list(paths.evidence_dir.glob("*.json")):
             ok = False
             reasons.append("requires at least one evidence json (latest evidence ref or evidence/*.json)")
@@ -1613,8 +1774,6 @@ def cmd_archive(args: argparse.Namespace) -> None:
     archived_paths = resolve_task_paths(repo_root, task_id, archived=True)
     wf_text = archived_paths.workflow.read_text(encoding="utf-8")
     wf_text = rewrite_agentdocs_prefix(wf_text, src_prefix=f".agentdocs/tasks/{task_id}/", dst_prefix=f".agentdocs/archive/{task_id}/")
-    wf_text = update_frontmatter_field(wf_text, "status", "archived")
-    wf_text = update_frontmatter_field(wf_text, "updated_at", now_str())
     ensure_text(archived_paths.workflow, wf_text)
 
     rewrite_pack_refs(
@@ -1622,6 +1781,8 @@ def cmd_archive(args: argparse.Namespace) -> None:
         src_prefix=f".agentdocs/tasks/{task_id}/",
         dst_prefix=f".agentdocs/archive/{task_id}/",
     )
+    sync_task_metadata(archived_paths, archived=True)
+    wf_text = archived_paths.workflow.read_text(encoding="utf-8")
 
     # Update derived indexes (remove from active, add to archive).
     index_path, archive_index_path = ensure_agentdocs(repo_root)
@@ -1658,8 +1819,6 @@ def cmd_reopen(args: argparse.Namespace) -> None:
     paths = resolve_task_paths(repo_root, task_id, archived=False)
     wf_text = paths.workflow.read_text(encoding="utf-8")
     wf_text = rewrite_agentdocs_prefix(wf_text, src_prefix=f".agentdocs/archive/{task_id}/", dst_prefix=f".agentdocs/tasks/{task_id}/")
-    wf_text = update_frontmatter_field(wf_text, "status", "active")
-    wf_text = update_frontmatter_field(wf_text, "updated_at", now_str())
     # record reopen trigger into recovery section (best-effort)
     wf_lines = wf_text.splitlines()
     if args.trigger:
@@ -1674,6 +1833,8 @@ def cmd_reopen(args: argparse.Namespace) -> None:
         src_prefix=f".agentdocs/archive/{task_id}/",
         dst_prefix=f".agentdocs/tasks/{task_id}/",
     )
+    sync_task_metadata(paths, archived=False)
+    wf_text = paths.workflow.read_text(encoding="utf-8")
 
     # Update derived indexes.
     index_path, archive_index_path = ensure_agentdocs(repo_root)
@@ -1706,6 +1867,7 @@ def cmd_update_current(args: argparse.Namespace) -> None:
     paths = resolve_task_paths(repo_root, task_id, archived=False)
     if not paths.workflow.exists():
         raise SystemExit(f"BLOCK: missing workflow: {paths.workflow}")
+    sync_task_metadata(paths, archived=False)
 
     lines = load_workflow_lines(paths.workflow)
     if args.active_subtask is not None:

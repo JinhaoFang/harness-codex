@@ -38,6 +38,69 @@ python .codex/tools/agentctl.py update-current   --task-id <task-id>   --externa
 4. record the external refs back into workflow
 5. keep comments short and traceable; prefer file/ref links over long summaries
 
+## GitHub writing conventions
+
+### Issue body
+When mirroring a grounded task into GitHub, prefer this structure:
+
+```markdown
+## Background
+- what problem or change triggered this task
+
+## Goal
+- the grounded deliverable
+- the observable effect
+
+## Acceptance Criteria
+- [ ] concrete, externally checkable result
+- [ ] concrete, externally checkable result
+
+## Validation
+- Test: `<real command>`
+- Or behavior/screenshot/log proof: `<real evidence path or step>`
+
+## Runtime refs
+- Plan: `.agentdocs/tasks/<task-id>/plan.md`
+- Workflow: `.agentdocs/tasks/<task-id>/workflow.md`
+```
+
+### Progress comment
+Prefer short progress updates backed by current runtime truth:
+
+```markdown
+## Progress
+- Completed: ...
+- Verified by: `<real command or evidence ref>`
+- Next: ...
+```
+
+### PR body
+Prefer this structure:
+
+```markdown
+## Summary
+- what changed
+
+## Testing
+- Test: `<real command>`
+- Evidence: `<evidence-ref>`
+
+## Traceability
+- Plan: `.agentdocs/tasks/<task-id>/plan.md`
+- Workflow: `.agentdocs/tasks/<task-id>/workflow.md`
+- Refs: `gh:issue#123`
+```
+
+Use `Closes #123` only when the PR is actually intended to close the issue.
+
+## Git timing conventions
+- Create a branch only after `plan-review` passes and the task is truly entering implementation.
+- Prefer branch names tied to the collaboration object when one exists, for example `issue-123` or `task-<slug>`.
+- Do not commit before a meaningful local verification step exists for that slice.
+- Prefer one verified slice per commit instead of one giant end-of-task commit.
+- Prefer commit subjects in the form `feat: ...`, `fix: ...`, `refactor: ...`, `docs: ...`, `test: ...`, `chore: ...`, or `TDD: ...`.
+- If the work is linked to a GitHub issue, put `Refs: #123` in the commit body; reserve `Closes #123` for the final PR or final closing commit when appropriate.
+
 ## Do not
 - do not require GitHub for every task
 - do not create a second task ledger in issue comments

@@ -3,8 +3,11 @@ description = "Read-only codebase explorer for world grounding before plans or c
 sandbox_mode = "read-only"
 model_reasoning_effort = "high"
 developer_instructions = """
-Stay in exploration mode.
-Read the active subtask pack first when one exists.
+You are the explorer role.
+Apply the repository `subagent-bootstrap` discipline first, then the `world-grounding` skill.
+Treat the parent prompt as routing and question framing, not as world truth.
+Read the active subtask pack first when one exists, then the relevant plan and workflow sections, then the minimum real repo anchors needed.
+Use `.agentdocs/*` to learn scope, stage, and constraints; use code, tests, config, logs, and runtime artifacts as world truth.
 Trace real execution paths, key symbols, existing tests, configuration, and reusable mechanisms.
 For migration / deletion / reclassification tasks, identify source materials, current directory structure, and candidate deletion / migration boundaries before suggesting actions.
 Prefer targeted file reads and search over broad scans.

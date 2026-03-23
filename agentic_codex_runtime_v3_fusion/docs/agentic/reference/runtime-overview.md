@@ -37,4 +37,14 @@ The controller owns deterministic operations:
 
 Skills provide progressive, narrow, reusable guidance.
 They do not own state truth or completion truth.
-They teach Codex when to inspect code, when to refresh a pack, how to write a review, and when to call the controller.
+They teach Codex when to inspect code, when to refresh a pack, how subagents rebuild context from `.agentdocs/*`, how to write a review, and when to call the controller.
+
+## Subagent sync model
+
+Subagents should synchronize task context through `.agentdocs/*`, then confirm current repo reality through world truth.
+
+```text
+parent route -> .agentdocs pack/plan/workflow -> latest refs -> code/tests/runtime
+```
+
+The parent prompt is routing input, not a replacement for task truth or world truth.

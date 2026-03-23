@@ -4,8 +4,13 @@
 
 ## Identity
 - Task ID: 
+- Task title: 
 - Subtask ID: 
 - Generated at: 
+- Plan status: 
+- Workflow status: 
+- Plan updated at: 
+- Workflow updated at: 
 
 ## Current objective
 - Goal: 
@@ -24,6 +29,9 @@
 - Source materials: 
 - Reusable mechanisms: 
 - External refs: 
+- Latest evidence ref: 
+- Latest plan review ref: 
+- Latest close review ref: 
 
 ## Checks
 - Required verification: 

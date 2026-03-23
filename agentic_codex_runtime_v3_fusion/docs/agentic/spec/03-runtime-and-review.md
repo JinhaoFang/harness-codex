@@ -124,10 +124,14 @@ MUST：
 - reviewer 默认不继承 builder 的长对话历史
 - reviewer 只读取 plan、必要 pointers、代码世界与必要过程证据
 - reviewer 可以由专门 subagent 执行
+- subagent 应先从当前 `.agentdocs/*` 重建 task / process 上下文，再读取最小必要的 world truth
+- rereview 仍然是 fresh full review；上一轮 findings 只能作为附加回归检查清单
 
 MUST NOT：
 - builder 自证式 review
 - 共享长上下文导致 review 变成 continuation
+- 让 parent prompt 把 reviewer scope 收缩成“只检查上次报错的几项”
+- 把 prior findings list 当成 rereview 的完整输入
 
 ## 4. 过程证据的使用原则
 
@@ -150,9 +154,10 @@ resume 不是“继续上次上下文”，而是“重新进入系统”。
 1. 读取 `AGENTS.md`
 2. 读取 `workflow.md`
 3. 读取 `plan.md`
-4. 核对当前代码 / tests
+4. 读取 active subtask pack（若存在）
 5. 只补读必要 review / evidence
-6. 再生新的 subtask pack / review digest
+6. 核对当前代码 / tests
+7. 再生新的 subtask pack / review digest
 
 ## 6. 反熵机制
 

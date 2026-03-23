@@ -10,7 +10,7 @@
 - `AGENTS.md` = Codex 自动加载的仓库工作协议。
 - `.codex/config.toml` = 项目 Codex 默认配置和角色注册表。
 - `.codex/agents/*.toml` = 用于 Subagents（子代理协作）的 custom agents 角色配置（需 `name` / `description` / `developer_instructions`）。
-- `.agents/skills/*` = 仓库技能。
+- `.agents/skills/*` = 仓库技能（阶段 skill / 方法 skill / 评审 skill）。
 - `.codex/tools/agentctl.py` = 确定性控制平面。
 - `docs/agentic/spec/07-discuss-and-plan-contract.md` = `DISCUSS -> PLAN` 的最小冻结合同。
 - `.agentdocs/insight.md` = 跨任务可复用的工程/迁移/治理经验（非真相层；禁止复制单次 workflow；必须带可复核 anchors）。
@@ -35,6 +35,15 @@
 
 在运行相关的真实仓库命令之前，不得声称工作已完成。
 
+## 工程偏好
+
+- 优先复用现有代码路径，积极标记 DRY 违反。
+- 测试充分是硬性要求；行为验证、回归测试和边角 case 不应被随意省略。
+- 追求“工程化适度”：不 hacky，不过早抽象，不无意义扩层。
+- 深思熟虑优先于快改；显式优于巧妙；最小 diff 优于大范围重构。
+- 复杂设计、关键数据流、状态转换和非显然测试 setup 倾向使用 ASCII 图表达。
+- 修改附近已有 ASCII 图的代码时，图的维护是变更的一部分；过期图比没有图更糟。
+
 ## 硬性规则
 
 - 不要为了修补流程问题而新增长期工件；优先强化现有 `AGENTS.md`、`plan.md`、`workflow.md`、review/evidence schema、subtask-pack 与 controller。
@@ -55,10 +64,15 @@
 - 将评审和证据分开。
 - 将子任务包视为衍生视图，绝不视为新的事实来源。
 - 对于结构化写入、验证、归档、重新开启和包刷新，优先使用控制器命令。
+- TDD 是方法 skill，不是 runtime gate，也不应被嵌入 stage / controller；但任何 code-bearing development task 在实现时都必须启用 `tdd`。
+- owner-side 的工程方案挑战可以使用 `plan-eng-review`，但它不能替代正式 `plan-review` verdict。
 - 当现实与文字描述冲突时，信任代码、测试、配置和运行时行为，而非过时的摘要。
+- `parent -> subagent` 的交接应只提供 role、task id、subtask id、request id、当前目标和可选 extra focus；subagent 必须自己从 `.agentdocs/*` 与当前代码世界重建上下文。
+- `.agentdocs/*` 是 subagent 的任务 / 过程同步层，不是世界真相替代层；代码 / tests / config / runtime 仍然是 world truth。
 - 不允许评审者角色修改业务代码。
 - `plan-review` 必须完整核对任务要求层与 Goal truth 核心约束；World truth 只允许在显式记录抽样范围、依据与残余风险时抽样。
 - 对迁移 / 删除 / 重组 / 重新分类类任务，review 必须回看原始 source materials，不能只看迁移后的输出物。
+- 所有 rereview 都必须重新做一次 full-scope review；上轮 findings 只能作为回归检查清单，不能成为新的 scope 边界。
 - 当任何 subagent 的结果位于当前关键路径上时，主 agent 不得在结果返回前推进依赖该结果的清理、归档或完成性判断；默认 wait 时间是 30 mins，单次 wait 超时不等于失败。
 
 ## 最低关卡
@@ -73,13 +87,55 @@
 - `plan_reviewer`：当 grounded plan 已准备好并需要独立 verdict 时使用；主 agent 先请求 `plan-review`，再等待 reviewer 通过 `submit-review` 回写。
 - `close_reviewer`：当实现证据已齐备并需要独立 close verdict 时使用；主 agent 先请求 `close-review`，再等待 reviewer 通过 `submit-review` 回写。
 - `explorer`：当 world grounding 跨多个入口 / 符号 / source materials，或主会话已经被探索笔记、日志、堆栈跟踪污染时优先使用。
-- `worker`：当一个 grounded subtask 的写入边界明确、实现不再是极小改动，或需要与主会话隔离实现噪音时使用。
+- `worker`：当一个 grounded subtask 的写入边界明确，且实现已经超过“极小单文件修补”时默认优先使用；主会话只保留真正微小、无需隔离上下文的实现。
 - 所有 subagent 默认 wait 时间是 `30 mins`。
 - 关键路径上的 subagent 未返回前，不得推进依赖该结果的下一步 gate。
 - reviewer verdict 未通过 `submit-review` 落入 workflow 前，不得把其视为已完成 review。
+- 任何重新 review 都优先新开 fresh reviewer 线程；若复用旧 reviewer，也必须按 fresh review 规则重新读取当前 truth。
 
-## 可选模块激活索引
+## subagent 交接契约
 
+主 agent 负责路由，不负责替 subagent 重写完整工作法。
+
+最小交接内容：
+- role
+- task id
+- subtask id
+- review request id（如果是 reviewer）
+- current objective
+- optional extra focus / required method overlay
+
+subagent 的标准进入顺序：
+
+```text
+parent handoff
+    |
+    v
+subtask pack
+    |
+    v
+plan.md + workflow.md
+    |
+    v
+latest relevant refs
+    |
+    v
+minimum world truth
+    |
+    v
+role-specific action
+```
+
+补充规则：
+- `subagent-bootstrap` 是所有 subagent 的共享进入技能。
+- `worker` 进入后叠加 `execute-subtask`；对 code-bearing development task 再强制叠加 `tdd`。
+- `plan_reviewer` / `close_reviewer` 进入后叠加各自 review skill；extra focus 只能加严，不能缩窄必检范围。
+
+## 可选技能 / 模块激活索引
+
+- 对任何 code-bearing development task：必须启用 `tdd`。
+- 需要让任何 subagent 从 `.agentdocs/*` 自举、避免过度依赖主 agent recap 时：启用 `subagent-bootstrap`。
+- 需要在 formal `plan-review` 前先做 owner-side 的工程方案挑战时：启用 `plan-eng-review`。
 - 需要外部协作镜像、issue / PR traceability 或 `gh` 交互时：启用 `github-collaboration`。
 - 需要并行执行空间、风险隔离或 reviewer 复现时：启用 `worktree-isolation`。
 - 需要跨 session 恢复、中断后重进或大上下文清理后继续时：启用 `session-recovery`。

@@ -22,6 +22,7 @@ Evidence does not decide whether the task is approved.
 - keep notes short and factual
 - attach artifact paths when files, screenshots, logs, or reports exist
 - create separate evidence entries when checks serve different purposes
+- for TDD-driven development work, prefer separate evidence entries for the red proof and the green proof
 
 ## Structured writeback
 

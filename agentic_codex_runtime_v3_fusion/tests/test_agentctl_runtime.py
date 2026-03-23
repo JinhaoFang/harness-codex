@@ -199,6 +199,12 @@ class AgentctlRuntimeTests(unittest.TestCase):
     def plan_text(self) -> str:
         return self.plan_path.read_text(encoding="utf-8")
 
+    def pack_path(self, subtask: str = "S1") -> Path:
+        return self.task_dir / "subtask-packs" / f"{subtask}.md"
+
+    def pack_text(self, subtask: str = "S1") -> str:
+        return self.pack_path(subtask).read_text(encoding="utf-8")
+
     def request_review(self, review_type: str, subtask: str) -> str:
         result = self.run_cmd(
             "request-review",
@@ -211,8 +217,78 @@ class AgentctlRuntimeTests(unittest.TestCase):
         )
         return self.parse_stdout_value(result.stdout, "- request id: ")
 
+    def test_refresh_pack_rejects_missing_fusion_plan_fields(self) -> None:
+        incomplete = build_complete_plan(self.task_id, "State sync")
+        incomplete = incomplete.replace(
+            "- Observable effect: Workflow and plan frontmatter expose the current task and review state.\n",
+            "- Observable effect:\n",
+        )
+        incomplete = incomplete.replace(
+            "- Demo sentence of success: The generated artifacts show whether status transitions remain accurate.\n",
+            "- Demo sentence of success:\n",
+        )
+        incomplete = incomplete.replace(
+            "- Terminal completion definition: The runtime state can be checked directly from generated artifacts.\n",
+            "- Terminal completion definition:\n",
+        )
+        self.plan_path.write_text(incomplete, encoding="utf-8")
+
+        result = self.run_cmd("refresh-pack", "--task-id", self.task_id, "--subtask", "S1", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("plan missing Goal/Observable effect", result.stderr)
+        self.assertIn("plan missing Goal/Demo sentence of success", result.stderr)
+        self.assertIn("plan missing Acceptance/Terminal completion definition", result.stderr)
+
+    def test_update_current_syncs_title_mirrors(self) -> None:
+        renamed_title = "Renamed state sync"
+        text = self.plan_text().replace("title: State sync", f"title: {renamed_title}", 1)
+        self.plan_path.write_text(text, encoding="utf-8")
+
+        self.run_cmd(
+            "update-current",
+            "--task-id",
+            self.task_id,
+            "--current-gate",
+            "Freeze Goal Truth",
+            "--allowed-next-action",
+            "plan-review",
+            "--active-subtask",
+            "S1",
+            "--event",
+            "test setup: metadata sync",
+        )
+
+        plan_text = self.plan_text()
+        workflow_text = self.workflow_text()
+        self.assertIn(f"title: {renamed_title}", plan_text)
+        self.assertIn(f"# Plan: {renamed_title}", plan_text)
+        self.assertNotIn(f"updated_at: {OLD_TIMESTAMP}", plan_text)
+        self.assertIn(f"title: {renamed_title}", workflow_text)
+        self.assertIn(f"# Workflow: {renamed_title}", workflow_text)
+        self.assertIn("status: active", workflow_text)
+
+    def test_refresh_pack_tracks_metadata_and_title_freshness(self) -> None:
+        self.run_cmd("refresh-pack", "--task-id", self.task_id, "--subtask", "S1")
+        pack_text = self.pack_text()
+        self.assertIn("- Task title: State sync", pack_text)
+        self.assertIn("- Plan status: frozen", pack_text)
+        self.assertIn("- Workflow status: active", pack_text)
+
+        renamed_title = "Renamed state sync"
+        text = self.plan_text().replace("title: State sync", f"title: {renamed_title}", 1)
+        text = text.replace("# Plan: State sync", f"# Plan: {renamed_title}", 1)
+        self.plan_path.write_text(text, encoding="utf-8")
+
+        result = self.run_cmd("check-gate", "--task-id", self.task_id, "--action", "plan-review", "--json", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("active subtask pack is stale for Task title", result.stdout)
+
     def test_refresh_pack_freezes_plan_and_plan_review_approves_it(self) -> None:
         self.run_cmd("refresh-pack", "--task-id", self.task_id, "--subtask", "S1")
+        pack_text = self.pack_text()
+        self.assertIn("- Task title: State sync", pack_text)
+        self.assertIn("- Plan status: frozen", pack_text)
+        self.assertIn("- Workflow status: active", pack_text)
         plan_text = self.plan_text()
         self.assertIn("status: frozen", plan_text)
         self.assertNotIn(f"updated_at: {OLD_TIMESTAMP}", plan_text)
@@ -264,6 +340,17 @@ class AgentctlRuntimeTests(unittest.TestCase):
         plan_text = self.plan_text()
         self.assertIn("status: approved", plan_text)
         self.assertNotIn(f"updated_at: {OLD_TIMESTAMP}", plan_text)
+
+        result = self.run_cmd("check-gate", "--task-id", self.task_id, "--action", "implement", "--json", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("active subtask pack is stale", result.stdout)
+        self.assertIn("Latest plan review ref", result.stdout)
+
+        self.run_cmd("refresh-pack", "--task-id", self.task_id, "--subtask", "S1")
+        pack_text = self.pack_text()
+        self.assertIn("- Plan status: approved", pack_text)
+        result = self.run_cmd("check-gate", "--task-id", self.task_id, "--action", "implement", "--json")
+        self.assertIn('"pass": true', result.stdout)
 
     def test_submit_review_requires_pending_request(self) -> None:
         self.run_cmd("refresh-pack", "--task-id", self.task_id, "--subtask", "S1")
@@ -337,6 +424,7 @@ class AgentctlRuntimeTests(unittest.TestCase):
             "--finding",
             "other:low:test plan review",
         )
+        self.run_cmd("refresh-pack", "--task-id", self.task_id, "--subtask", "S1")
         self.run_cmd(
             "update-current",
             "--task-id",
@@ -367,6 +455,12 @@ class AgentctlRuntimeTests(unittest.TestCase):
             "--cwd",
             ".",
         )
+        result = self.run_cmd("check-gate", "--task-id", self.task_id, "--action", "close-review", "--json", check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("active subtask pack is stale", result.stdout)
+        self.assertIn("Latest evidence ref", result.stdout)
+
+        self.run_cmd("refresh-pack", "--task-id", self.task_id, "--subtask", "S1", "--evidence-ref", self.latest_evidence_ref())
         close_request_id = self.request_review("close", "S1")
         self.run_cmd(
             "submit-review",

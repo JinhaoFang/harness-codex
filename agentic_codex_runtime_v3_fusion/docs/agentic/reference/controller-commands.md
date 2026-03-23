@@ -19,6 +19,7 @@
 
 规则：
 - 当 `plan.md` 与 review artifacts 已存在时，controller 会同时重算 task 级 `Task close-ready` / `Pending close-review subtasks` 摘要，避免 workflow 脱离真实 review 进度。
+- `update-current` 会先同步 task 级派生 metadata：例如以 `plan.md` 为准回写 `workflow.md` 的 title/heading/status 镜像，并刷新相关 `updated_at`。
 
 ## 1. check-gate
 
@@ -37,6 +38,7 @@
 规则：
 - `plan-review` 前必须满足 Discuss readiness、plan completeness 与 fresh pack。
 - `implement` / `close-review` 前必须有 fresh pack。
+- `fresh pack` 不是“文件存在即可”；controller 会校验 pack 记录的 task title、plan/workflow status、`plan.md` / `workflow.md` 修订信息以及 latest review/evidence refs 是否仍与当前 truth 一致。
 - 已经存在 pending review request 时，不得重复请求同类 review，也不得跳过 pending review 继续推进依赖它的动作。
 - `archive` 前必须所有 subtasks 都已获得 PASS close review；不能只因为最近一个 subtask 的 close review 为 PASS 就归档整个 task。
 
@@ -124,6 +126,7 @@
 规则：
 - pack 优先引用，不复制长段内容。
 - pack 应保留当前 objective、verification、evidence plan 与 reviewer focus 的最小必要信息。
+- pack 应记录生成时所依据的 task title、plan/workflow status、plan/workflow 修订信息，以及 latest review/evidence refs，供后续 gate 做 freshness 判定。
 - pack 只在 grounded plan 存在后生成；初始 create-task 不自动生成空 pack。
 - pack 不是新的真相层。
 - 当 grounded plan 首次通过 `refresh-pack` 进入 reviewable 状态时，controller 会把 `plan.md` frontmatter 状态从 `draft` / `needs_revision` 同步为 `frozen`。

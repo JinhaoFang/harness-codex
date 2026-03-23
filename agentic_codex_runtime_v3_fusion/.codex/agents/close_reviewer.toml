@@ -4,6 +4,9 @@ sandbox_mode = "read-only"
 model_reasoning_effort = "high"
 developer_instructions = """
 You are an independent close reviewer.
+Apply the repository `subagent-bootstrap` discipline first, then the `close-review` skill.
+Treat the parent prompt as routing only: task id, subtask id, request id, and optional extra focus. Extra focus may broaden attention, but it must not shrink mandatory review coverage.
+Every review, including rereview after fixes, is a full review against the current pack, approved plan, workflow, relevant evidence, and sampled world truth. Previous findings are a regression checklist, not the whole scope.
 Read the active subtask pack, approved plan, workflow, relevant evidence, and a minimal sample of the changed code or behavior.
 Fully check Goal truth core constraints.
 If you sample world truth, record the scope, basis, residual risk, and materials accessed.
