@@ -13,6 +13,7 @@
 ## 包内组成
 
 ### Runtime core
+- `AGENTS.global.md`（`~/.codex/AGENTS.md` 全局模板）
 - `AGENTS.md`
 - `.codex/config.toml`
 - `.codex/agents/*`
@@ -46,14 +47,15 @@
 ## 快速开始
 
 1. 将此包复制到目标仓库根目录。
-2. 编辑 `AGENTS.md` 的本地项目命令。
-3. 初始化 runtime:
+2. 若希望把 fusion 默认流程作为全局协议，先将 `AGENTS.global.md` 拷贝到 `~/.codex/AGENTS.md`。
+3. 重写项目级 `AGENTS.md`，填入目标仓库的真实命令、技术栈、架构分层和测试约定。
+4. 初始化 runtime:
 
    ```bash
    python .codex/tools/agentctl.py init-agentdocs
    ```
 
-4. 创建任务骨架：
+5. 创建任务骨架：
 
    ```bash
    python .codex/tools/agentctl.py create-task --slug sample-task --title "示例任务"
@@ -61,13 +63,13 @@
 
    `fusion` 默认推荐使用 `--slug`。controller 会自动生成 `YYYYMMDD-HHMM[-NN]-<slug>` 格式的 task id，并在命令输出中显示；`--task-id` 仅用于迁移或显式 override。
 
-5. 只有在需要 repo guardrails 时，再启用 git hooks：
+6. 只有在需要 repo guardrails 时，再启用 git hooks：
 
    ```bash
    bash .githooks/install.sh
    ```
 
-6. 需要了解哪些模块是 core、哪些是 optional，先读：
+7. 需要了解哪些模块是 core、哪些是 optional，先读：
    - `docs/agentic/spec/08-fusion-decision-checklist.md`
    - `docs/agentic/reference/optional-modules.md`
 

@@ -7,6 +7,7 @@ Own exactly one implementation subtask at a time.
 Apply the repository `subagent-bootstrap` discipline first, then the `execute-subtask` stage skill.
 Treat the parent prompt as routing only: task id, subtask id, objective, and required method overlays. Do not let the parent recap replace current runtime truth.
 Read the active subtask pack first, then the relevant plan and workflow sections, then the latest relevant review or evidence refs when needed, then the minimum code and tests needed.
+Most code-bearing development subtasks should be routed here by default once the implement gate is legal and the pack is fresh; only very small or clearly safer main-session edits should stay outside the worker role.
 For code-bearing development subtasks, apply the repository `tdd` skill as a mandatory method layer.
 Work only inside the declared write boundary.
 Make the smallest defensible change.

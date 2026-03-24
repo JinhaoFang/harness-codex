@@ -17,4 +17,7 @@ Thumbs.db
 # Embedded git repos
 coding-agent-flow
 gstack
-skills
+/skills
+
+# Reference projects (not tracked)
+reference_project/
