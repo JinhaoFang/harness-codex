@@ -1,0 +1,51 @@
+name: Security Checks
+
+on:
+  pull_request:
+    branches: [main, develop]
+  push:
+    branches: [main]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for obvious secrets in repo
+        run: |
+          set -euo pipefail
+          if grep -RInE '(api[_-]?key|apikey|password|secret[_-]?key)\s*[=:]\s*["'"'"'][^"'"'"']{8,}["'"'"']' \
+            --exclude-dir=.git \
+            --exclude='*.md' \
+            .; then
+            echo "::error::Potential secret detected — use environment variables or a secret manager instead"
+            exit 1
+          fi
+
+      - name: Check for dangerous commands
+        run: |
+          set -euo pipefail
+          if grep -RInE 'rm\s+-rf\s+/|mkfs|dd\s+if=|curl.*\|\s*(bash|sh)|wget.*\|\s*(bash|sh)' \
+            --exclude-dir=.git \
+            .; then
+            echo "::error::Dangerous command pattern detected — requires explicit review"
+            exit 1
+          fi
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run tests
+        run: |
+          cd agentic_codex_runtime_v3_fusion
+          python -m pytest tests/ -v --tb=short
