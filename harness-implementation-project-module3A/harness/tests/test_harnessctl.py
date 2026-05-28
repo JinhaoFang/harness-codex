@@ -78,7 +78,6 @@ id: "{wu_id}"
 title: "Test"
 type: "bugfix"
 risk: "{risk}"
-status: "draft"
 ```
 
 ## Intent
@@ -191,22 +190,27 @@ class HarnessCtlTests(unittest.TestCase):
             event = {"tool_name": "bash", "tool_input": {"command": "git reset --hard"}}
             proc = subprocess.run([sys.executable, str(pre_tool)], cwd=root, input=json.dumps(event), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
             out = json.loads(proc.stdout)
-            self.assertEqual(out["decision"], "block")
             self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "PreToolUse")
             self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
 
             event = {"tool_name": "bash", "tool_input": {"command": "npm publish"}}
-            proc = subprocess.run([sys.executable, str(pre_tool)], cwd=root, input=json.dumps(event), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            proc = subprocess.run([sys.executable, str(pre_tool), "--platform", "codex"], cwd=root, input=json.dumps(event), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
             out = json.loads(proc.stdout)
-            self.assertEqual(out["decision"], "approve")
             self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "PreToolUse")
+            self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+            self.assertIn("must not emit ask", out["hookSpecificOutput"]["permissionDecisionReason"])
+
+            proc = subprocess.run([sys.executable, str(pre_tool), "--platform", "claude"], cwd=root, input=json.dumps(event), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            out = json.loads(proc.stdout)
             self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "ask")
+
+            permission = root / "harness" / "hooks" / "permission_request_policy.py"
+            proc = subprocess.run([sys.executable, str(permission)], cwd=root, input=json.dumps(event), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            self.assertEqual(proc.stdout, "")
 
             event = {"tool_name": "bash", "tool_input": {"command": "git status --short"}}
             proc = subprocess.run([sys.executable, str(pre_tool)], cwd=root, input=json.dumps(event), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
-            out = json.loads(proc.stdout)
-            self.assertEqual(out["decision"], "approve")
-            self.assertNotIn("hookSpecificOutput", out)
+            self.assertEqual(proc.stdout, "")
 
             stop = root / "harness" / "hooks" / "stop_without_evidence.py"
             proc = subprocess.run([sys.executable, str(stop)], cwd=root, text=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
@@ -375,6 +379,12 @@ class HarnessCtlTests(unittest.TestCase):
             self.assertIn("Cannot lock", proc.stderr)
 
             fill_contract(root, "WU-ALIGN")
+            contract = root / ".harness" / "work-units" / "active" / "WU-ALIGN" / "contract.md"
+            contract.write_text(contract.read_text(encoding="utf-8").replace('risk: "medium"\n', 'risk: "medium"\nstatus: "draft"\n'), encoding="utf-8")
+            proc = run(root, "check", "--id", "WU-ALIGN", "--gate", "spec", "--strict", check=False)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("state.json is the lifecycle authority", proc.stdout)
+            contract.write_text(contract.read_text(encoding="utf-8").replace('status: "draft"\n', ''), encoding="utf-8")
             proc = run(root, "check", "--id", "WU-ALIGN", "--gate", "spec", "--strict")
             self.assertIn('"decision": "PASS"', proc.stdout)
 
@@ -460,6 +470,14 @@ class HarnessCtlTests(unittest.TestCase):
             self.assertIn("profile=thin", thin_proc.stdout)
             self.assertTrue((thin / "AGENTS.md").exists())
             self.assertTrue((thin / "CLAUDE.md").exists())
+            self.assertTrue((thin / "docs" / "harness" / "README.md").exists())
+            self.assertTrue((thin / "docs" / "harness" / "workflow.md").exists())
+            self.assertTrue((thin / "docs" / "harness" / "risk-gates.md").exists())
+            self.assertFalse((thin / "docs" / "harness" / "platform-adapters.md").exists())
+            self.assertFalse((thin / "docs" / "harness" / "mechanism-registry.yaml").exists())
+            self.assertFalse((thin / "docs" / "harness" / "evaluation").exists())
+            self.assertFalse((thin / "docs" / "harness" / "adoption-guide.md").exists())
+            self.assertFalse((thin / "docs" / "harness" / "source-analysis.md").exists())
             self.assertTrue((thin / "harness" / "cli" / "harnessctl.py").exists())
             self.assertTrue((thin / "skills" / "harness-clarify" / "SKILL.md").exists())
             self.assertFalse((thin / "skills" / "harness-review").exists())
@@ -470,6 +488,10 @@ class HarnessCtlTests(unittest.TestCase):
             targets.append(controlled)
             self.assertTrue((controlled / "harness" / "tests" / "test_harnessctl.py").exists())
             self.assertTrue((controlled / ".github" / "workflows" / "harness-checks.yml").exists())
+            self.assertFalse((controlled / "docs" / "harness" / "platform-adapters.md").exists())
+            self.assertFalse((controlled / "docs" / "harness" / "mechanism-registry.yaml").exists())
+            self.assertFalse((controlled / "docs" / "harness" / "evaluation").exists())
+            self.assertFalse((controlled / "docs" / "harness" / "adoption-guide.md").exists())
             self.assertTrue((controlled / "skills" / "harness-review" / "SKILL.md").exists())
             self.assertTrue((controlled / "skills" / "harness-spec" / "SKILL.md").exists())
             self.assertFalse((controlled / ".codex").exists())
@@ -480,6 +502,7 @@ class HarnessCtlTests(unittest.TestCase):
             self.assertIn("platform adapter", codex_proc.stdout)
             self.assertTrue((codex / ".codex" / "agents" / "worker.toml").exists())
             self.assertTrue((codex / ".agents" / "skills" / "harness-review" / "SKILL.md").exists())
+            self.assertTrue((codex / "docs" / "harness" / "platform-adapters.md").exists())
             self.assertFalse((codex / ".claude").exists())
 
             claude, claude_proc = adopt("claude")
@@ -487,6 +510,7 @@ class HarnessCtlTests(unittest.TestCase):
             self.assertIn("platform adapter", claude_proc.stdout)
             self.assertTrue((claude / ".claude" / "settings.json").exists())
             self.assertTrue((claude / ".claude" / "skills" / "harness-review" / "SKILL.md").exists())
+            self.assertTrue((claude / "docs" / "harness" / "platform-adapters.md").exists())
             self.assertFalse((claude / ".codex").exists())
 
             full, _ = adopt("full")

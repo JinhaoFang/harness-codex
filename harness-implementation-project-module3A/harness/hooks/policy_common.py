@@ -57,14 +57,18 @@ def policy_decision(tool_name: str, command: str) -> Tuple[str, str]:
     return "allow", ""
 
 
-def emit(decision: str, reason: str) -> int:
-    # Codex PreToolUse requires hookSpecificOutput.hookEventName. The top-level
-    # decision is limited to approve/block. Codex does not accept
-    # permissionDecision=allow, so plain approval omits hookSpecificOutput.
+def emit_pre_tool_use(decision: str, reason: str, *, platform: str = "codex") -> int:
+    """Emit a platform-specific PreToolUse response.
+
+    Codex PreToolUse currently supports deny, additional context, and allow with
+    updatedInput. It does not support permissionDecision=ask or the legacy
+    decision=approve shape. Claude Code supports ask, but this shared policy is
+    used as a deterministic guardrail, so ask-class commands are blocked with a
+    clear human-approval instruction unless a platform-specific permission hook
+    handles them.
+    """
     if decision == "deny":
         out: Dict[str, Any] = {
-            "decision": "block",
-            "reason": reason,
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "deny",
@@ -72,15 +76,52 @@ def emit(decision: str, reason: str) -> int:
             },
         }
     elif decision == "ask":
-        out = {
-            "decision": "approve",
+        msg = reason + " Use the platform permission request or explicit human gate; PreToolUse must not emit ask."
+        if platform == "claude":
+            out = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "ask",
+                    "permissionDecisionReason": reason,
+                },
+            }
+        else:
+            out = {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "deny",
+                    "permissionDecisionReason": msg,
+                },
+            }
+    else:
+        # Exit 0 with no output lets the native permission flow continue.
+        return 0
+    print(json.dumps(out))
+    return 0
+
+
+def emit_permission_request(decision: str, reason: str) -> int:
+    """Emit Codex PermissionRequest output. No output means normal approval UI."""
+    if decision == "deny":
+        out: Dict[str, Any] = {
             "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "ask",
-                "permissionDecisionReason": reason,
+                "hookEventName": "PermissionRequest",
+                "decision": {"behavior": "deny", "message": reason},
+            },
+        }
+    elif decision == "allow":
+        out = {
+            "hookSpecificOutput": {
+                "hookEventName": "PermissionRequest",
+                "decision": {"behavior": "allow"},
             },
         }
     else:
-        out = {"decision": "approve"}
+        return 0
     print(json.dumps(out))
     return 0
+
+
+# Backward-compatible alias for older tests or adopters.
+def emit(decision: str, reason: str) -> int:
+    return emit_pre_tool_use(decision, reason, platform=os.environ.get("HARNESS_HOOK_PLATFORM", "codex"))

@@ -5,7 +5,6 @@ id: "WU-EXAMPLE"
 title: "Fix login redirect after expired session"
 type: "bugfix"
 risk: "medium"
-status: "specified"
 ```
 
 ## Intent

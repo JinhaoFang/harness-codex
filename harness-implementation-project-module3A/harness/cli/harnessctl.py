@@ -879,6 +879,8 @@ def check_spec(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
             blocking.append(f"Missing heading: {heading}")
     if meta.get("risk") not in RISK_ORDER:
         blocking.append("Contract risk must be one of trivial, low, medium, high, critical.")
+    if "status" in meta:
+        blocking.append("Contract header must not contain lifecycle status; state.json is the lifecycle authority.")
 
     if has_placeholder(text):
         msg = "Contract still contains TBD/TODO placeholders. Replace them before the Work Unit is locked or run."
@@ -1069,24 +1071,83 @@ def check_review(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
     return ("BLOCK" if blocking else "WARN" if warnings else "PASS"), blocking, warnings
 
 
+def git_changed_paths(root: Path, base_commit: str = "") -> set[str]:
+    paths: set[str] = set()
+    queries: List[List[str]] = []
+    if base_commit and base_commit not in {"no-git", ""}:
+        queries.append(["diff", "--name-only", "--diff-filter=ACDMRTUXB", f"{base_commit}..HEAD"])
+    queries.extend((["diff", "--name-only", "--diff-filter=ACDMRTUXB"], ["diff", "--cached", "--name-only", "--diff-filter=ACDMRTUXB"]))
+    for args in queries:
+        out = run_git(root, args, "")
+        paths.update(x.strip() for x in out.splitlines() if x.strip())
+    for line in run_git(root, ["status", "--short"], "").splitlines():
+        if not line.strip():
+            continue
+        path = line[3:].strip()
+        if " -> " in path:
+            old, new = path.split(" -> ", 1)
+            paths.add(old.strip())
+            paths.add(new.strip())
+        else:
+            paths.add(path)
+    return paths
+
+
+def changed_file_ref_is_supported(root: Path, ref: str, diff_paths: set[str]) -> bool:
+    ref = ref.strip()
+    if not ref:
+        return True
+    if ref.startswith(".harness/work-units/") or ref == ".harness/current":
+        return True
+    rel = ref.rstrip("/")
+    path = root / rel
+    if path.exists():
+        return True
+    if ref.endswith("/"):
+        prefix = rel + "/"
+        return any(p.startswith(prefix) for p in diff_paths)
+    return rel in diff_paths
+
+
+def handoff_is_generated(path: Path) -> bool:
+    if not path.exists():
+        return False
+    text = path.read_text(encoding="utf-8")
+    if "Not generated yet" in text or "{{" in text:
+        return False
+    return bool(text.strip())
+
+
 def check_archive(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
     blocking: List[str] = []
     warnings: List[str] = []
     state = load_json(state_path(wu_path), {})
     risk = str(state.get("risk") or contract_meta(wu_path).get("risk", "low"))
-    for name, func in (("verification", check_verification), ("review", check_review)):
+    spec_decision, spec_blocking, spec_warnings = check_spec(root, wu_path)
+    blocking.extend([f"spec: {x}" for x in spec_blocking])
+    warnings.extend([f"spec: {x}" for x in spec_warnings])
+    mismatch = lock_mismatch(state, wu_path)
+    if mismatch:
+        blocking.append(mismatch + "; archive requires the locked contract hash to match contract.md.")
+    for name, func in (("scope", check_scope), ("verification", check_verification), ("review", check_review)):
         decision, b, w = func(root, wu_path)
         blocking.extend([f"{name}: {x}" for x in b])
         warnings.extend([f"{name}: {x}" for x in w])
     handoff = wu_path / "handoff.md"
     no_next_step_reason = str(state.get("no_next_step_reason", "")).strip()
-    missing_handoff = not handoff.exists() or "Not generated yet" in handoff.read_text(encoding="utf-8")
-    if missing_handoff and not no_next_step_reason:
+    if not handoff_is_generated(handoff) and not no_next_step_reason:
         msg = "Handoff is missing or not generated. Archive should include handoff or no-next-step reason."
         if RISK_ORDER.get(risk, 1) >= 2:
             blocking.append(msg)
         else:
             warnings.append(msg)
+
+    base_commit = str(state.get("base_commit", ""))
+    diff_paths = git_changed_paths(root, base_commit)
+    for ref in state.get("changed_files", []):
+        ref_s = str(ref).strip()
+        if not changed_file_ref_is_supported(root, ref_s, diff_paths):
+            blocking.append(f"state.changed_files references an unsupported path: {ref_s}")
     return ("BLOCK" if blocking else "WARN" if warnings else "PASS"), blocking, warnings
 
 
@@ -1206,6 +1267,10 @@ def validate_work_unit(root: Path, work_unit_id: str, wu_path: Path) -> Tuple[Li
     warnings: List[str] = []
     if not contract_path(wu_path).exists():
         blocking.append(f"{work_unit_id}/contract.md: missing Work Unit Contract")
+    else:
+        meta = parse_yaml_header(contract_path(wu_path).read_text(encoding="utf-8"))
+        if "status" in meta:
+            blocking.append(f"{work_unit_id}/contract.md: contract header must not contain lifecycle status; state.json is the lifecycle authority")
 
     state_schema = schema_for(root, "state", blocking)
     state_label = artifact_label(root, state_path(wu_path))
@@ -1495,11 +1560,58 @@ def handoff(args: argparse.Namespace) -> int:
     return 0
 
 
+def write_archive_closure_handoff(wu_path: Path, work_unit_id: str, reason: str) -> None:
+    state = load_json(state_path(wu_path), {})
+    receipts = read_jsonl(receipts_path(wu_path))[-5:]
+    evidence_lines = [f"{r.get('receipt_id')} {r.get('result')} {r.get('claim_ref')} {r.get('type')} {r.get('command')}" for r in receipts]
+    text = f"""# Handoff: {work_unit_id}
+
+## Status
+
+archived
+
+## Closure reason
+
+{reason}
+
+## Objective
+
+{contract_summary(wu_path, 500)}
+
+## Changed files
+
+{render_list(state.get('changed_files', []))}
+
+## Latest evidence
+
+{render_list(evidence_lines)}
+
+## Known failures
+
+{render_list(state.get('known_failures', []))}
+
+## Blockers
+
+{render_list(state.get('blockers', []))}
+
+## Next safe action
+
+No task-local next step. Reopen the Work Unit or create a follow-up Work Unit if further changes are required.
+
+## Rollback or reopen path
+
+{state.get('rollback_or_reopen_path', '')}
+"""
+    (wu_path / "handoff.md").write_text(text, encoding="utf-8")
+
+
 def archive(args: argparse.Namespace) -> int:
     root = args.root
     work_unit_id, wu_path = resolve_wu(root, args.id)
     if args.no_next_step_reason:
         update_state(root, wu_path, no_next_step_reason=args.no_next_step_reason)
+        if not handoff_is_generated(wu_path / "handoff.md"):
+            write_archive_closure_handoff(wu_path, work_unit_id, args.no_next_step_reason)
     decision, blocking, warnings = check_archive(root, wu_path)
     if decision == "BLOCK" and not args.force:
         print(json.dumps({"decision": decision, "blocking_reasons": blocking, "warnings": warnings}, ensure_ascii=False, indent=2))
@@ -1516,6 +1628,7 @@ def archive(args: argparse.Namespace) -> int:
     if current_file(root).exists() and current_file(root).read_text(encoding="utf-8").strip() == work_unit_id:
         current_file(root).unlink()
     print(f"Archived {work_unit_id}: {dest}")
+    return 0
     return 0
 
 

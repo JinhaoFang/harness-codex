@@ -7,6 +7,8 @@ description: Use GitHub issues, branches, commits, and pull requests as the coll
 
 GitHub is collaboration and audit surface, not completion authority. Work Unit Contract, repo state, evidence receipts, review verdicts, and waivers remain the sources of truth.
 
+Do not use one GitHub pattern for every task. Choose the repo/GitHub footprint by task type, risk, collaboration need, and artifact retention need.
+
 ## When to use
 
 Use this skill only when GitHub materially helps collaboration:
@@ -17,6 +19,19 @@ Use this skill only when GitHub materially helps collaboration:
 - CI or human reviewers need concise external context.
 
 Do not require GitHub for every local task.
+
+
+## Task-type operating model
+
+| Task class | Work Unit in repo | GitHub issue | PR / CI evidence | Artifact retention |
+|---|---|---|---|---|
+| trivial docs/comment | no | no | optional | final note |
+| low local bugfix | optional | optional | PR evidence note | short-lived logs |
+| medium multi-file or user-visible behavior | yes | recommended | PR links receipts and CI artifacts | retain receipts/review summaries |
+| high auth/billing/security/migration | yes, locked | yes | protected PR with human/reviewer gate | retain receipts, waivers, rollback notes |
+| critical production/data/compliance | yes, audit-grade | yes | protected PR and explicit approval | retain audit artifacts outside noisy repo paths when large |
+
+Commit stable harness implementation, not transient runtime noise. Keep large command logs, screenshots, traces, and raw transcripts in CI artifacts or temporary storage unless audit policy requires committing them.
 
 ## Branch / worktree
 

@@ -54,7 +54,7 @@ python3 scripts/adopt.py /path/to/repo --profile claude
 python3 scripts/adopt.py /path/to/repo --profile full
 ```
 
-`thin` is the default and copies only the portable entry files, core controller, hooks, schemas, templates, docs, and minimal skills. `controlled` adds tests, CI example, and the full lifecycle skill set. `codex` and `claude` add platform adapters for those runtimes. `full` copies all default examples. Platform adapter files should be merged with existing project configuration rather than overwritten blindly.
+`thin` is the default and copies only the portable entry files, core controller, hooks, schemas, templates, essential runtime docs, and minimal skills. Package docs such as this adoption guide, source analysis, mechanism registry, and HEB evaluation cases are not copied into target repositories. `controlled` adds tests, CI example, and the full lifecycle skill set. `codex` and `claude` add platform adapters for those runtimes. `full` copies all default runtime examples. Platform adapter files should be merged with existing project configuration rather than overwritten blindly.
 
 ## What this project is not
 

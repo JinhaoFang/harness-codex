@@ -5,7 +5,6 @@ id: "{{id}}"
 title: "{{title}}"
 type: "{{type}}"
 risk: "{{risk}}"
-status: "draft"
 ```
 
 ## Intent

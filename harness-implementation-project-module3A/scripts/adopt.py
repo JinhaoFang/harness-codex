@@ -9,7 +9,10 @@ import shutil
 COMMON_PATHS = [
     "AGENTS.md",
     "CLAUDE.md",
-    "docs/harness",
+    "docs/harness/README.md",
+    "docs/harness/workflow.md",
+    "docs/harness/risk-gates.md",
+    "docs/harness/platform-adapters.md",
     "harness/cli",
     "harness/hooks",
     "harness/schemas",
@@ -41,8 +44,8 @@ CONTROLLED_SKILLS = [
 ]
 
 GITHUB_SKILL = "skills/harness-github"
-CODEX_PATHS = [".agents/skills", ".codex"]
-CLAUDE_PATHS = [".claude"]
+CODEX_PATHS = [".agents/skills", ".codex", "docs/harness/platform-adapters.md"]
+CLAUDE_PATHS = [".claude", "docs/harness/platform-adapters.md"]
 
 PROFILES = {
     "thin": COMMON_PATHS + THIN_SKILLS,

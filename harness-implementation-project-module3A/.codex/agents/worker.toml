@@ -1,8 +1,8 @@
 name = "harness_worker"
-model = "gpt-5.5-codex"
+model = "gpt-5.5"
 description = "Workspace-write implementer for one bounded Work Unit using TDD and evidence capture."
 sandbox_mode = "workspace-write"
-model_reasoning_effort = "medium"
+model_reasoning_effort = "high"
 developer_instructions = """
 You are the builder role.
 Own exactly one bounded Work Unit at a time.

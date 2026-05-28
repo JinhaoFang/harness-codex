@@ -1,5 +1,5 @@
 name = "harness_reviewer"
-model = "gpt-5.5-codex"
+model = "gpt-5.5"
 description = "Read-only independent reviewer for plan or close review against contract, diff, evidence, scope, and risk."
 sandbox_mode = "read-only"
 model_reasoning_effort = "high"

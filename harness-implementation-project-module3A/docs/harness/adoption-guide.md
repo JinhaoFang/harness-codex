@@ -12,13 +12,15 @@ Profiles:
 
 | Profile | Copies | Use when |
 |---|---|---|
-| `thin` | entry files, `docs/harness`, controller, hooks, schemas, templates, clarify/evidence/handoff skills | first adoption or manual controller use |
+| `thin` | entry files, essential runtime docs, controller, hooks, schemas, templates, clarify/evidence/handoff skills | first adoption or manual controller use |
 | `controlled` | thin + harness tests, CI example, full lifecycle skill set | repository wants Work Unit/evidence/review/CI discipline |
 | `codex` | controlled + `.agents/skills` and `.codex` examples | target repo uses Codex project skills/subagents/hooks |
 | `claude` | controlled + `.claude` examples | target repo uses Claude Code permissions/hooks/agents/skills |
 | `full` | all default examples | sandbox/evaluation repo, not blind production adoption |
 
 Platform adapter files can conflict with existing project settings. Merge `.codex/`, `.claude/`, `.github/`, `AGENTS.md`, `CLAUDE.md`, and `Makefile` deliberately; use `--force` only after review.
+
+Implementation-package docs are intentionally not copied to target repositories. This excludes `docs/harness/evaluation/`, `docs/harness/adoption-guide.md`, `docs/harness/source-analysis.md`, and `docs/harness/mechanism-registry.yaml`. `docs/harness/platform-adapters.md` is copied only with platform profiles.
 
 Run:
 

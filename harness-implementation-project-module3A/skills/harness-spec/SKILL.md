@@ -10,6 +10,7 @@ Create the smallest contract that lets an agent, reviewer, and controller agree 
 ## Rules
 
 - Contract owns user intent, scope, success, required evidence, and stop conditions.
+- Contract does not own lifecycle status; `state.json` is the lifecycle authority. Do not add `status:` to the contract header.
 - Execution plans, feature lists, Codex Goals, briefings, and agent summaries do not override the contract.
 - The agent should read `contract.md` directly before implementation. Do not replace it with a compressed briefing.
 - Scope, success, risk, or required evidence changes require an explicit contract amendment before implementation continues.
@@ -34,8 +35,9 @@ python3 harness/cli/harnessctl.py new --id <WU-ID> --title "..." --type <type> -
    - out-of-bounds;
    - required evidence IDs and commands;
    - success / blocked stop conditions;
-   - resolved open questions;
+   - resolved open questions or `- none`;
    - context pointers.
+   Do not add lifecycle `status` to the YAML header; readiness is set by `harnessctl lock`.
 4. Run the spec gate and lock the Work Unit before implementation:
 
 ```bash

@@ -33,6 +33,8 @@ Before implementation, check:
 - Plan has verification steps tied to required evidence.
 - Findings are concrete and actionable.
 
+The reviewer should not stop to ask the user by default. If inputs are insufficient, return `CHANGES_REQUESTED`, `BLOCKED`, or `NEEDS_HUMAN_GATE` with the exact missing artifact or decision.
+
 For medium or higher risk, running requires passing plan review. For high or critical risk, use independent review or human gate.
 
 ## Close review checks

@@ -70,7 +70,22 @@ Review verdict / human gate -> acceptance authority
 
 ### Codex hooks
 
-Codex hooks can run deterministic policy scripts before commands and at stop points. Treat them as defense-in-depth. Critical safety boundaries should also be protected by sandboxing, permissions, branch protection, CI, or human approval.
+Codex hooks can run deterministic policy scripts at multiple lifecycle points. Treat them as defense-in-depth. Critical safety boundaries should also be protected by sandboxing, permissions, branch protection, CI, or human approval.
+
+Recommended project hooks in this template:
+
+| Event | Harness use | Boundary note |
+|---|---|---|
+| `SessionStart` | add a small recovery brief for the active Work Unit | context only |
+| `UserPromptSubmit` | remind the model to clarify/spec non-trivial work before editing | context or prompt block only |
+| `PreToolUse` | deny deterministic dangerous shell/edit operations | guardrail, not complete enforcement |
+| `PermissionRequest` | deny requests that remain unsafe; otherwise let native approval flow continue | approval support |
+| `SubagentStart` | inject minimal worker/reviewer role context | context only |
+| `PreCompact` | stop compaction when changed active work has no handoff | recovery guard |
+| `PostCompact` | add recovery context after compaction | context only |
+| `Stop` | continue the turn when changed active work lacks fresh evidence | completion guard |
+
+Do not return `permissionDecision: "ask"` from Codex `PreToolUse`. Ask-class behavior belongs in the native approval flow and `PermissionRequest`; `PreToolUse` should deny, add context, rewrite allowed input, or stay silent.
 
 ## Claude Code
 
@@ -109,15 +124,36 @@ Use deny/ask/allow profiles:
 - ask before pushes, resets, migrations, deployment, broad deletes, or external side effects;
 - allow low-risk reads, targeted tests, and controller commands.
 
+### Claude Code hooks
+
+Claude Code supports a broader lifecycle surface than this template fully uses. Recommended retained hooks:
+
+| Event | Harness use |
+|---|---|
+| `SessionStart` | active Work Unit recovery brief |
+| `UserPromptSubmit` | non-trivial-work routing reminder |
+| `PreToolUse` | deterministic dangerous command/path guard |
+| `PostToolBatch` | short context nudge after a batch of tools |
+| `TaskCompleted` | prevent task completion when changed active work lacks fresh evidence |
+| `SubagentStart` | inject worker/reviewer output protocol |
+| `PreCompact` / `PostCompact` | handoff-before-compact and recovery-after-compact |
+| `Stop` | stop-without-evidence guard |
+
+Use hooks for deterministic checks and lifecycle reminders. Use subagents or prompt hooks only when the check requires actual reasoning over repo facts; do not move critical safety solely into an LLM hook.
+
 ## GitHub
 
-GitHub is the preferred collaboration surface for non-trivial project work:
+GitHub is collaboration and review surface, not completion authority. Use it by task type and risk:
 
-- issue or Work Unit defines intent and scope;
-- branch/worktree isolates execution;
-- PR contains summary, diff, evidence receipts, skipped checks, risk notes, and reviewer verdict;
-- CI attaches fresh evidence;
-- review comments become compounding candidates.
+| Task class | Git repo artifacts | GitHub issue | PR / CI |
+|---|---|---|---|
+| trivial docs/comment | usually none beyond final note | no | optional |
+| low local bugfix | optional lightweight Work Unit note | optional | PR evidence note is enough |
+| medium multi-file or user-visible behavior | Work Unit Contract, state, receipts/review summaries | recommended | PR with evidence refs and CI artifacts |
+| high auth/billing/security/migration | locked Work Unit, waiver/review records, rollback path | required | protected PR, CI artifacts, human gate when needed |
+| critical production/data/compliance | audit-grade Work Unit and approvals | required | protected PR, retained artifacts, explicit human approval |
+
+Stable harness implementation belongs in repo: `AGENTS.md`, `CLAUDE.md`, `harness/cli`, `harness/hooks`, schemas, templates, skills, adapters, and CI workflows. Large command logs, screenshots, traces, and raw session transcripts should usually live in CI/GitHub artifacts or temporary storage, not as committed repo noise.
 
 ## Symphony or issue-based orchestration
 
