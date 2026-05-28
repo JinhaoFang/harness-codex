@@ -17,5 +17,9 @@ jobs:
         run: python3 -m unittest discover -s harness/tests
       - name: Harness doctor
         run: python3 harness/cli/harnessctl.py doctor
+      - name: Validate harness artifacts
+        run: python3 harness/cli/harnessctl.py validate --all --strict
+      - name: Harness lifecycle CI gate
+        run: python3 harness/cli/harnessctl.py ci --strict
       - name: Skill catalog gate
         run: python3 harness/cli/harnessctl.py check --gate skills --strict

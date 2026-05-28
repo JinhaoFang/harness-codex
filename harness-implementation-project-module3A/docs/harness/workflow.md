@@ -45,7 +45,14 @@ Every completion claim needs fresh, claim-relative evidence or waiver. Skipped c
 Gate:
 
 ```bash
+python3 harness/cli/harnessctl.py validate --id <WU-ID> --strict
 python3 harness/cli/harnessctl.py check --id <WU-ID> --gate verification --strict
+```
+
+CI / protected branch gate:
+
+```bash
+python3 harness/cli/harnessctl.py ci --strict
 ```
 
 ## 6. Review

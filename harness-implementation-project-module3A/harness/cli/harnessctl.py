@@ -937,7 +937,7 @@ def check_scope(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
     out_of_bounds = bullets_after_subheading(text, "### Out of bounds")
     state = load_json(state_path(wu_path), {})
     base_commit = str(state.get("base_commit", ""))
-    files = [f for f in work_unit_changed_files(root, base_commit) if not f.startswith(".harness/work-units/")]
+    files = [f for f in work_unit_changed_files(root, base_commit) if not f.startswith(".harness/")]
     blocking: List[str] = []
     warnings: List[str] = []
     for f in files:
@@ -1088,6 +1088,278 @@ def check_archive(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]
         else:
             warnings.append(msg)
     return ("BLOCK" if blocking else "WARN" if warnings else "PASS"), blocking, warnings
+
+
+SCHEMA_FILES = {
+    "state": "work-unit.schema.json",
+    "evidence": "evidence-receipt.schema.json",
+    "review": "review-verdict.schema.json",
+    "waiver": "waiver.schema.json",
+}
+
+
+def artifact_label(root: Path, path: Path) -> str:
+    try:
+        return str(path.relative_to(root))
+    except ValueError:
+        return str(path)
+
+
+def schema_for(root: Path, key: str, blocking: List[str]) -> Dict[str, Any]:
+    path = root / "harness" / "schemas" / SCHEMA_FILES[key]
+    try:
+        return load_json(path)
+    except HarnessError as exc:
+        blocking.append(str(exc))
+        return {}
+
+
+def json_for_validation(path: Path, label: str, blocking: List[str]) -> Optional[Dict[str, Any]]:
+    if not path.exists():
+        blocking.append(f"{label}: missing JSON artifact")
+        return None
+    try:
+        obj = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        blocking.append(f"{label}: invalid JSON: {exc}")
+        return None
+    if not isinstance(obj, dict):
+        blocking.append(f"{label}: expected JSON object")
+        return None
+    return obj
+
+
+def json_type_matches(value: Any, expected: Any) -> bool:
+    types = expected if isinstance(expected, list) else [expected]
+    for typ in types:
+        if typ == "string" and isinstance(value, str):
+            return True
+        if typ == "integer" and isinstance(value, int) and not isinstance(value, bool):
+            return True
+        if typ == "boolean" and isinstance(value, bool):
+            return True
+        if typ == "array" and isinstance(value, list):
+            return True
+        if typ == "object" and isinstance(value, dict):
+            return True
+        if typ == "null" and value is None:
+            return True
+    return False
+
+
+def validate_against_schema(obj: Dict[str, Any], schema: Dict[str, Any], label: str) -> List[str]:
+    errors: List[str] = []
+    for field in schema.get("required", []):
+        if field not in obj:
+            errors.append(f"{label}: missing required field {field}")
+    properties = schema.get("properties", {})
+    for field, spec in properties.items():
+        if field not in obj:
+            continue
+        value = obj[field]
+        if "const" in spec and value != spec["const"]:
+            errors.append(f"{label}: {field} must be {spec['const']!r}")
+        if "enum" in spec and value not in spec["enum"]:
+            errors.append(f"{label}: {field} must be one of {', '.join(str(x) for x in spec['enum'])}")
+        if "type" in spec and not json_type_matches(value, spec["type"]):
+            expected = spec["type"] if isinstance(spec["type"], str) else "|".join(spec["type"])
+            errors.append(f"{label}: {field} must be {expected}")
+    return errors
+
+
+def read_receipts_for_validation(path: Path, label: str, blocking: List[str]) -> List[Dict[str, Any]]:
+    if not path.exists():
+        blocking.append(f"{label}: missing receipts.jsonl")
+        return []
+    rows: List[Dict[str, Any]] = []
+    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError as exc:
+            blocking.append(f"{label}:{n}: invalid JSONL row: {exc}")
+            continue
+        if not isinstance(obj, dict):
+            blocking.append(f"{label}:{n}: expected JSON object")
+            continue
+        rows.append(obj)
+    return rows
+
+
+def validate_harness_config(root: Path, blocking: List[str], warnings: List[str]) -> None:
+    path = harness_dir(root) / "config.json"
+    if not path.exists():
+        warnings.append(".harness/config.json is missing. Run `harnessctl init` if this repository uses the harness.")
+        return
+    obj = json_for_validation(path, ".harness/config.json", blocking)
+    if obj is None:
+        return
+    if obj.get("schema_version") != "harness.config.v1":
+        blocking.append(".harness/config.json: schema_version must be 'harness.config.v1'")
+    if not isinstance(obj.get("profile"), str) or not obj.get("profile"):
+        blocking.append(".harness/config.json: profile must be a non-empty string")
+
+
+def validate_work_unit(root: Path, work_unit_id: str, wu_path: Path) -> Tuple[List[str], List[str]]:
+    blocking: List[str] = []
+    warnings: List[str] = []
+    if not contract_path(wu_path).exists():
+        blocking.append(f"{work_unit_id}/contract.md: missing Work Unit Contract")
+
+    state_schema = schema_for(root, "state", blocking)
+    state_label = artifact_label(root, state_path(wu_path))
+    state = json_for_validation(state_path(wu_path), state_label, blocking)
+    if state is not None and state_schema:
+        blocking.extend(validate_against_schema(state, state_schema, state_label))
+        if state.get("work_unit_id") != work_unit_id:
+            blocking.append(f"{state_label}: work_unit_id must match directory name {work_unit_id}")
+
+    evidence_schema = schema_for(root, "evidence", blocking)
+    receipt_label = artifact_label(root, receipts_path(wu_path))
+    receipts = read_receipts_for_validation(receipts_path(wu_path), receipt_label, blocking)
+    receipt_ids: set[str] = set()
+    for idx, receipt in enumerate(receipts, start=1):
+        label = f"{receipt_label}:{idx}"
+        if evidence_schema:
+            blocking.extend(validate_against_schema(receipt, evidence_schema, label))
+        if receipt.get("work_unit_id") != work_unit_id:
+            blocking.append(f"{label}: work_unit_id must match {work_unit_id}")
+        receipt_id = str(receipt.get("receipt_id", "")).strip()
+        if not receipt_id:
+            blocking.append(f"{label}: receipt_id must be non-empty")
+        elif receipt_id in receipt_ids:
+            blocking.append(f"{label}: duplicate receipt_id {receipt_id}")
+        else:
+            receipt_ids.add(receipt_id)
+        if receipt.get("result") == "skipped" and not str(receipt.get("note", "")).strip():
+            blocking.append(f"{label}: skipped evidence requires note")
+
+    review_schema = schema_for(root, "review", blocking)
+    for path in sorted(reviews_dir(wu_path).glob("verdict-*.json")):
+        label = artifact_label(root, path)
+        verdict = json_for_validation(path, label, blocking)
+        if verdict is None:
+            continue
+        if review_schema:
+            blocking.extend(validate_against_schema(verdict, review_schema, label))
+        if verdict.get("work_unit_id") != work_unit_id:
+            blocking.append(f"{label}: work_unit_id must match {work_unit_id}")
+        for receipt_ref in verdict.get("evidence_refs", []):
+            ref = str(receipt_ref).strip()
+            if ref and ref not in receipt_ids:
+                blocking.append(f"{label}: references missing evidence receipt {ref}")
+
+    waiver_schema = schema_for(root, "waiver", blocking)
+    for path in sorted(waivers_dir(wu_path).glob("*.json")):
+        label = artifact_label(root, path)
+        waiver_obj = json_for_validation(path, label, blocking)
+        if waiver_obj is None:
+            continue
+        if waiver_schema:
+            blocking.extend(validate_against_schema(waiver_obj, waiver_schema, label))
+        if waiver_obj.get("work_unit_id") != work_unit_id:
+            blocking.append(f"{label}: work_unit_id must match {work_unit_id}")
+        if not str(waiver_obj.get("approved_by", "")).startswith("human:"):
+            blocking.append(f"{label}: approved_by must start with human:")
+
+    return blocking, warnings
+
+
+def all_work_units(root: Path) -> List[Tuple[str, Path]]:
+    out: List[Tuple[str, Path]] = []
+    for base in (active_dir(root), archive_dir(root)):
+        if not base.exists():
+            continue
+        for path in sorted(base.iterdir()):
+            if path.is_dir():
+                out.append((path.name, path))
+    return out
+
+
+def validate(args: argparse.Namespace) -> int:
+    root = args.root
+    blocking: List[str] = []
+    warnings: List[str] = []
+    validate_harness_config(root, blocking, warnings)
+    if args.all:
+        work_units = all_work_units(root)
+    else:
+        work_unit_id, wu_path = resolve_wu(root, args.id)
+        work_units = [(work_unit_id, wu_path)]
+
+    for work_unit_id, wu_path in work_units:
+        b, w = validate_work_unit(root, work_unit_id, wu_path)
+        blocking.extend(b)
+        warnings.extend(w)
+
+    current = current_file(root)
+    if args.all and current.exists():
+        current_id = current.read_text(encoding="utf-8").strip()
+        if current_id and current_id not in {wu_id for wu_id, _ in work_units}:
+            blocking.append(f".harness/current references missing Work Unit {current_id}")
+
+    decision = "BLOCK" if blocking else "WARN" if warnings else "PASS"
+    out = {
+        "schema_version": "harness.validation.v1",
+        "scope": "all" if args.all else work_units[0][0],
+        "decision": decision,
+        "validated_work_units": [wu_id for wu_id, _ in work_units],
+        "blocking_reasons": blocking,
+        "warnings": warnings,
+        "required_next_action": "Fix invalid harness artifacts." if blocking else "Proceed with caution." if warnings else "Validation passed.",
+        "created_at": now_iso(),
+    }
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 2 if decision == "BLOCK" and args.strict else 0
+
+
+def has_non_harness_work_changes(root: Path, wu_path: Path) -> bool:
+    state = load_json(state_path(wu_path), {})
+    base_commit = str(state.get("base_commit", ""))
+    files = work_unit_changed_files(root, base_commit)
+    return any(not f.startswith(".harness/") for f in files)
+
+
+def ci(args: argparse.Namespace) -> int:
+    root = args.root
+    blocking: List[str] = []
+    warnings: List[str] = []
+    validate_harness_config(root, blocking, warnings)
+    active_units = [(p.name, p) for p in sorted(active_dir(root).iterdir()) if p.is_dir()] if active_dir(root).exists() else []
+    if args.require_active and not active_units:
+        blocking.append("CI requires at least one active Work Unit.")
+
+    for work_unit_id, wu_path in active_units:
+        b, w = validate_work_unit(root, work_unit_id, wu_path)
+        blocking.extend([f"{work_unit_id} validate: {x}" for x in b])
+        warnings.extend([f"{work_unit_id} validate: {x}" for x in w])
+        if not has_non_harness_work_changes(root, wu_path):
+            warnings.append(f"{work_unit_id}: no non-harness repository changes detected; lifecycle gates skipped.")
+            continue
+        for gate_name, gate_func in (("spec", check_spec), ("scope", check_scope), ("verification", check_verification), ("review", check_review)):
+            decision, gate_blocking, gate_warnings = gate_func(root, wu_path)
+            blocking.extend([f"{work_unit_id} {gate_name}: {x}" for x in gate_blocking])
+            warnings.extend([f"{work_unit_id} {gate_name}: {x}" for x in gate_warnings])
+
+    current = current_file(root)
+    if current.exists():
+        current_id = current.read_text(encoding="utf-8").strip()
+        if current_id and current_id not in {wu_id for wu_id, _ in active_units}:
+            blocking.append(f".harness/current references missing active Work Unit {current_id}")
+
+    decision = "BLOCK" if blocking else "WARN" if warnings else "PASS"
+    out = {
+        "schema_version": "harness.ci_check.v1",
+        "decision": decision,
+        "checked_work_units": [wu_id for wu_id, _ in active_units],
+        "blocking_reasons": blocking,
+        "warnings": warnings,
+        "required_next_action": "Fix blocking harness lifecycle gates." if blocking else "Proceed with caution." if warnings else "CI harness gate passed.",
+        "created_at": now_iso(),
+    }
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 2 if decision == "BLOCK" and args.strict else 0
 
 
 def parse_frontmatter(text: str) -> Dict[str, str]:
@@ -1367,6 +1639,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--gate", required=True, choices=sorted(CHECKS.keys()))
     p.add_argument("--strict", action="store_true", help="Return exit 2 on BLOCK.")
     p.set_defaults(func=check)
+
+    p = sub.add_parser("validate")
+    p.add_argument("--id")
+    p.add_argument("--all", action="store_true", help="Validate every active and archived Work Unit.")
+    p.add_argument("--strict", action="store_true", help="Return exit 2 on BLOCK.")
+    p.set_defaults(func=validate)
+
+    p = sub.add_parser("ci")
+    p.add_argument("--strict", action="store_true", help="Return exit 2 on BLOCK.")
+    p.add_argument("--require-active", action="store_true", help="Block if no active Work Unit exists.")
+    p.set_defaults(func=ci)
 
     p = sub.add_parser("handoff")
     p.add_argument("--id")

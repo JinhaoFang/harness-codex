@@ -76,20 +76,14 @@ def main() -> int:
     base = root()
     wu_id = current_work_unit_id(base)
     if not wu_id:
-        print(json.dumps({"decision": "approve"}))
         return 0
     if not has_changed_files(base, wu_id):
-        print(json.dumps({"decision": "approve"}))
         return 0
     ok, reason = verification_gate(base, wu_id)
     if ok:
-        out = {"decision": "approve"}
-        if reason:
-            out["reason"] = reason
-        print(json.dumps(out))
         return 0
     msg = "Active Work Unit has repository changes but verification gate is not satisfied. Record fresh claim-relative evidence or create a scoped waiver before claiming completion. " + reason
-    print(json.dumps({"decision": "block", "reason": msg, "hookSpecificOutput": {"permissionDecision": "deny", "permissionDecisionReason": msg}}))
+    print(json.dumps({"decision": "block", "reason": msg}))
     return 0
 
 

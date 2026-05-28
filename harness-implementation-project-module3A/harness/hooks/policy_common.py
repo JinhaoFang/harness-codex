@@ -58,20 +58,29 @@ def policy_decision(tool_name: str, command: str) -> Tuple[str, str]:
 
 
 def emit(decision: str, reason: str) -> int:
-    # Shape is compatible with Claude Code and Codex-style hook JSON consumers.
-    out: Dict[str, Any] = {
-        "hookSpecificOutput": {
-            "permissionDecision": decision,
-            "permissionDecisionReason": reason,
-        }
-    }
+    # Codex PreToolUse requires hookSpecificOutput.hookEventName. The top-level
+    # decision is limited to approve/block. Codex does not accept
+    # permissionDecision=allow, so plain approval omits hookSpecificOutput.
     if decision == "deny":
-        out["decision"] = "block"
-        out["reason"] = reason
+        out: Dict[str, Any] = {
+            "decision": "block",
+            "reason": reason,
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            },
+        }
     elif decision == "ask":
-        out["decision"] = "ask"
-        out["reason"] = reason
+        out = {
+            "decision": "approve",
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "ask",
+                "permissionDecisionReason": reason,
+            },
+        }
     else:
-        out["decision"] = "approve"
+        out = {"decision": "approve"}
     print(json.dumps(out))
     return 0

@@ -92,6 +92,26 @@ python3 harness/cli/harnessctl.py evidence \
 
 Freshness is checked against current HEAD and current diff hash. If the diff changes after evidence is recorded, re-run the relevant evidence or issue a waiver.
 
+## Artifact validation
+
+Use validation to catch corrupted or drifted harness artifacts before review, archive, or CI acceptance:
+
+```bash
+python3 harness/cli/harnessctl.py validate --id WU-001 --strict
+python3 harness/cli/harnessctl.py validate --all --strict
+```
+
+Validation checks schema versions, required fields, enum values, JSONL readability, Work Unit ID consistency, waiver ownership, and review-to-evidence references. It is intentionally lightweight and has no external dependency; it does not judge product correctness or replace verification/review gates.
+
+For pull requests or protected branches, use the aggregate CI gate:
+
+```bash
+python3 harness/cli/harnessctl.py ci --strict
+python3 harness/cli/harnessctl.py ci --strict --require-active
+```
+
+The CI gate runs artifact validation and, for active Work Units with non-`.harness/` repository changes, checks spec, scope, verification, and close review. `--require-active` is for repositories that want CI to reject changes that do not declare an active Work Unit.
+
 ## Review
 
 Plan review is a pre-implementation gate. It checks the locked Work Unit, context pointers, relevant repo truth, and proposed execution plan before coding starts. Medium or higher risk Work Units cannot enter `running` without a passing plan review.

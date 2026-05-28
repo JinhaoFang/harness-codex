@@ -172,6 +172,7 @@ class HarnessCtlTests(unittest.TestCase):
             out = json.loads(proc.stdout)
             self.assertEqual(out["decision"], "block")
             self.assertIn("verification gate", out["reason"])
+            self.assertNotIn("hookSpecificOutput", out)
 
             with self.assertRaises(harnessctl.HarnessError) as ctx:
                 harnessctl.submit_review(argparse.Namespace(
@@ -180,6 +181,36 @@ class HarnessCtlTests(unittest.TestCase):
                     evidence_ref=None, finding=None, required_rework=None,
                 ))
             self.assertIn("builder", str(ctx.exception).lower())
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_codex_hook_json_shapes(self):
+        root = make_repo()
+        try:
+            pre_tool = root / "harness" / "hooks" / "pre_tool_use_policy.py"
+            event = {"tool_name": "bash", "tool_input": {"command": "git reset --hard"}}
+            proc = subprocess.run([sys.executable, str(pre_tool)], cwd=root, input=json.dumps(event), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            out = json.loads(proc.stdout)
+            self.assertEqual(out["decision"], "block")
+            self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "PreToolUse")
+            self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "deny")
+
+            event = {"tool_name": "bash", "tool_input": {"command": "npm publish"}}
+            proc = subprocess.run([sys.executable, str(pre_tool)], cwd=root, input=json.dumps(event), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            out = json.loads(proc.stdout)
+            self.assertEqual(out["decision"], "approve")
+            self.assertEqual(out["hookSpecificOutput"]["hookEventName"], "PreToolUse")
+            self.assertEqual(out["hookSpecificOutput"]["permissionDecision"], "ask")
+
+            event = {"tool_name": "bash", "tool_input": {"command": "git status --short"}}
+            proc = subprocess.run([sys.executable, str(pre_tool)], cwd=root, input=json.dumps(event), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            out = json.loads(proc.stdout)
+            self.assertEqual(out["decision"], "approve")
+            self.assertNotIn("hookSpecificOutput", out)
+
+            stop = root / "harness" / "hooks" / "stop_without_evidence.py"
+            proc = subprocess.run([sys.executable, str(stop)], cwd=root, text=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            self.assertEqual(proc.stdout, "")
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
@@ -235,6 +266,96 @@ class HarnessCtlTests(unittest.TestCase):
 
             run(root, "submit-review", "--id", "WU-REVIEW", "--mode", "close", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context", "--evidence-ref", receipt_id)
             proc = run(root, "check", "--id", "WU-REVIEW", "--gate", "review", "--strict")
+            self.assertIn('"decision": "PASS"', proc.stdout)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_validate_gate_checks_artifact_shape_and_cross_refs(self):
+        root = make_repo()
+        try:
+            run(root, "init")
+            proc = run(root, "validate", "--all", "--strict")
+            self.assertIn('"decision": "PASS"', proc.stdout)
+
+            run(root, "new", "--id", "WU-VALID", "--title", "Validate", "--type", "bugfix", "--risk", "medium")
+            set_required_evidence(root, "WU-VALID", ["EV1"])
+            receipt_proc = run(root, "evidence", "--id", "WU-VALID", "--claim", "EV1", "--type", "test", "--result", "pass", "--command", "true", "--command-log-ref", ".harness/work-units/active/WU-VALID/evidence/artifacts/test.log")
+            receipt_id = json.loads(receipt_proc.stdout)["receipt_id"]
+            run(root, "waiver", "--id", "WU-VALID", "--approved-by", "human:owner@example.com", "--requirement", "EV2", "--reason", "Cannot run", "--replacement-evidence", "Manual", "--risk-accepted", "Temporary")
+            run(root, "submit-review", "--id", "WU-VALID", "--mode", "close", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context", "--evidence-ref", receipt_id)
+            proc = run(root, "validate", "--id", "WU-VALID", "--strict")
+            self.assertIn('"decision": "PASS"', proc.stdout)
+
+            wu_path = root / ".harness" / "work-units" / "active" / "WU-VALID"
+            state_path = wu_path / "state.json"
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            state["status"] = "impossible"
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            proc = run(root, "validate", "--id", "WU-VALID", "--strict", check=False)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("state.json: status must be one of", proc.stdout)
+
+            state["status"] = "draft"
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            receipts = wu_path / "evidence" / "receipts.jsonl"
+            receipts.write_text(receipts.read_text(encoding="utf-8") + "{broken json\n", encoding="utf-8")
+            proc = run(root, "validate", "--id", "WU-VALID", "--strict", check=False)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("receipts.jsonl", proc.stdout)
+
+            lines = receipts.read_text(encoding="utf-8").splitlines()
+            receipts.write_text("\n".join(lines[:-1]) + "\n", encoding="utf-8")
+            verdict = next((wu_path / "reviews").glob("verdict-*.json"))
+            obj = json.loads(verdict.read_text(encoding="utf-8"))
+            obj["evidence_refs"] = ["ev-does-not-exist"]
+            verdict.write_text(json.dumps(obj), encoding="utf-8")
+            proc = run(root, "validate", "--id", "WU-VALID", "--strict", check=False)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("references missing evidence receipt ev-does-not-exist", proc.stdout)
+
+            obj["evidence_refs"] = [receipt_id]
+            verdict.write_text(json.dumps(obj), encoding="utf-8")
+            waiver = next((wu_path / "waivers").glob("waiver-*.json"))
+            waiver_obj = json.loads(waiver.read_text(encoding="utf-8"))
+            waiver_obj["approved_by"] = "agent"
+            waiver.write_text(json.dumps(waiver_obj), encoding="utf-8")
+            proc = run(root, "validate", "--id", "WU-VALID", "--strict", check=False)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("approved_by must start with human:", proc.stdout)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_ci_gate_runs_lifecycle_checks_for_changed_active_work_unit(self):
+        root = make_repo()
+        try:
+            run(root, "init")
+            proc = run(root, "ci", "--strict")
+            self.assertIn('"decision": "PASS"', proc.stdout)
+
+            proc = run(root, "ci", "--strict", "--require-active", check=False)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("requires at least one active Work Unit", proc.stdout)
+
+            run(root, "new", "--id", "WU-CI", "--title", "CI", "--type", "bugfix", "--risk", "medium")
+            fill_contract(root, "WU-CI")
+            run(root, "lock", "--id", "WU-CI", "--status", "ready")
+            run(root, "submit-review", "--id", "WU-CI", "--mode", "plan", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context")
+            (root / "src").mkdir()
+            (root / "src" / "app.py").write_text("value = 1\n", encoding="utf-8")
+
+            proc = run(root, "ci", "--strict", check=False)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("WU-CI verification: Missing fresh pass evidence for required claim EV1", proc.stdout)
+            self.assertIn("WU-CI review: medium risk requires a passing close review verdict", proc.stdout)
+
+            receipt_proc = run(root, "evidence", "--id", "WU-CI", "--claim", "EV1", "--type", "test", "--result", "pass", "--command", "true", "--command-log-ref", ".harness/work-units/active/WU-CI/evidence/artifacts/test.log")
+            receipt_id = json.loads(receipt_proc.stdout)["receipt_id"]
+            proc = run(root, "ci", "--strict", check=False)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("WU-CI review: medium risk requires a passing close review verdict", proc.stdout)
+
+            run(root, "submit-review", "--id", "WU-CI", "--mode", "close", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context", "--evidence-ref", receipt_id)
+            proc = run(root, "ci", "--strict")
             self.assertIn('"decision": "PASS"', proc.stdout)
         finally:
             shutil.rmtree(root, ignore_errors=True)
@@ -325,6 +446,58 @@ class HarnessCtlTests(unittest.TestCase):
 
         proc = run(PROJECT_ROOT, "check", "--gate", "skills", "--strict")
         self.assertIn('"decision": "PASS"', proc.stdout)
+
+    def test_adopt_profiles_copy_expected_layers(self):
+        def adopt(profile):
+            target = Path(tempfile.mkdtemp(prefix=f"harness-adopt-{profile}-"))
+            proc = subprocess.run([sys.executable, str(PROJECT_ROOT / "scripts" / "adopt.py"), str(target), "--profile", profile], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=30)
+            return target, proc
+
+        targets = []
+        try:
+            thin, thin_proc = adopt("thin")
+            targets.append(thin)
+            self.assertIn("profile=thin", thin_proc.stdout)
+            self.assertTrue((thin / "AGENTS.md").exists())
+            self.assertTrue((thin / "CLAUDE.md").exists())
+            self.assertTrue((thin / "harness" / "cli" / "harnessctl.py").exists())
+            self.assertTrue((thin / "skills" / "harness-clarify" / "SKILL.md").exists())
+            self.assertFalse((thin / "skills" / "harness-review").exists())
+            self.assertFalse((thin / ".codex").exists())
+            self.assertFalse((thin / ".claude").exists())
+
+            controlled, _ = adopt("controlled")
+            targets.append(controlled)
+            self.assertTrue((controlled / "harness" / "tests" / "test_harnessctl.py").exists())
+            self.assertTrue((controlled / ".github" / "workflows" / "harness-checks.yml").exists())
+            self.assertTrue((controlled / "skills" / "harness-review" / "SKILL.md").exists())
+            self.assertTrue((controlled / "skills" / "harness-spec" / "SKILL.md").exists())
+            self.assertFalse((controlled / ".codex").exists())
+            self.assertFalse((controlled / ".claude").exists())
+
+            codex, codex_proc = adopt("codex")
+            targets.append(codex)
+            self.assertIn("platform adapter", codex_proc.stdout)
+            self.assertTrue((codex / ".codex" / "agents" / "worker.toml").exists())
+            self.assertTrue((codex / ".agents" / "skills" / "harness-review" / "SKILL.md").exists())
+            self.assertFalse((codex / ".claude").exists())
+
+            claude, claude_proc = adopt("claude")
+            targets.append(claude)
+            self.assertIn("platform adapter", claude_proc.stdout)
+            self.assertTrue((claude / ".claude" / "settings.json").exists())
+            self.assertTrue((claude / ".claude" / "skills" / "harness-review" / "SKILL.md").exists())
+            self.assertFalse((claude / ".codex").exists())
+
+            full, _ = adopt("full")
+            targets.append(full)
+            self.assertTrue((full / ".codex" / "agents" / "worker.toml").exists())
+            self.assertTrue((full / ".claude" / "settings.json").exists())
+            self.assertTrue((full / "skills" / "harness-github" / "SKILL.md").exists())
+            self.assertTrue((full / "examples").exists())
+        finally:
+            for target in targets:
+                shutil.rmtree(target, ignore_errors=True)
 
 
 if __name__ == "__main__":

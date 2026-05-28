@@ -2,25 +2,30 @@
 
 ## Step 1: Copy the thin layer
 
-Copy:
+Default adoption copies the thin layer:
 
-```text
-AGENTS.md
-CLAUDE.md
-docs/harness/README.md
-harness/cli/harnessctl.py
-harness/templates/
-harness/schemas/
-skills/harness-clarify/
-skills/harness-evidence/
-skills/harness-handoff/
+```bash
+python3 scripts/adopt.py /path/to/repo --profile thin
 ```
+
+Profiles:
+
+| Profile | Copies | Use when |
+|---|---|---|
+| `thin` | entry files, `docs/harness`, controller, hooks, schemas, templates, clarify/evidence/handoff skills | first adoption or manual controller use |
+| `controlled` | thin + harness tests, CI example, full lifecycle skill set | repository wants Work Unit/evidence/review/CI discipline |
+| `codex` | controlled + `.agents/skills` and `.codex` examples | target repo uses Codex project skills/subagents/hooks |
+| `claude` | controlled + `.claude` examples | target repo uses Claude Code permissions/hooks/agents/skills |
+| `full` | all default examples | sandbox/evaluation repo, not blind production adoption |
+
+Platform adapter files can conflict with existing project settings. Merge `.codex/`, `.claude/`, `.github/`, `AGENTS.md`, `CLAUDE.md`, and `Makefile` deliberately; use `--force` only after review.
 
 Run:
 
 ```bash
 python3 harness/cli/harnessctl.py init
 python3 harness/cli/harnessctl.py doctor
+python3 harness/cli/harnessctl.py validate --all --strict
 ```
 
 ## Step 2: Define the repository validation entrypoint
@@ -34,6 +39,10 @@ Create one Work Unit per task or issue. Keep the contract short enough for an ag
 ## Step 4: Add evidence receipts
 
 Record targeted tests, typechecks, runtime evidence, migration dry-runs, screenshots, or manual QA artifacts as receipts.
+
+Add `harnessctl validate --all --strict` to CI before verification/review gates so malformed state, receipt, review, or waiver artifacts cannot be accepted.
+
+Add `harnessctl ci --strict` as the aggregate protected-branch gate. For repositories where every PR must correspond to a Work Unit, use `harnessctl ci --strict --require-active`.
 
 ## Step 5: Add review gates where they pay off
 
