@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+.DS_Store
+.harness/work-units/active/*/evidence/artifacts/*
+.harness/tmp/
+.venv/

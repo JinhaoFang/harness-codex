@@ -1,0 +1,75 @@
+schema_version: harness.mechanism_registry.v1
+mechanisms:
+  - mechanism: harnessctl
+    type: controller-check
+    purpose: "Own Work Unit state transitions, evidence freshness checks, review gates, and handoff generation."
+    failure_mode: "Agent claims completion without fresh evidence, silently crosses scope, or leaves unrecoverable state."
+    protected_invariant: "No hidden state; no completion without evidence or waiver; review separated from evidence."
+    validation_method: "harness/tests plus HEB-E-001, HEB-S-001, and HEB-R-001."
+    known_cost: "Small CLI to maintain; requires developers/agents to run controller commands."
+    owner: "platform-owner"
+    introduced_at: "2026-05-27"
+    last_reviewed: "2026-05-28"
+    removal_condition: "Remove or replace if native platform lifecycle state and evidence checks cover the same gates with lower cost."
+    status: active
+  - mechanism: pre-tool-use-policy-hook
+    type: hook
+    purpose: "Block clearly dangerous shell commands and ask for safer paths before irreversible actions."
+    failure_mode: "Agent executes destructive command or bypasses review with force push/reset."
+    protected_invariant: "Non-negotiable boundaries are not enforced only by prompt."
+    validation_method: "Unit tests plus manual hook simulation."
+    known_cost: "May false-positive on legitimate maintenance commands."
+    owner: "platform-owner"
+    introduced_at: "2026-05-27"
+    last_reviewed: "2026-05-28"
+    removal_condition: "Remove if sandbox/permissions/policy-as-code supersedes it and tests confirm equivalent protection."
+    status: active
+  - mechanism: stop-without-evidence-hook
+    type: hook
+    purpose: "Warn or block stop attempts when active work has diff but no evidence or waiver."
+    failure_mode: "Premature victory and false completion."
+    protected_invariant: "Completion is evidence-gated."
+    validation_method: "HEB-E-001 and controller verification gate."
+    known_cost: "Can interrupt exploratory sessions; should be bypassable by explicit waiver or no active Work Unit."
+    owner: "platform-owner"
+    introduced_at: "2026-05-27"
+    last_reviewed: "2026-05-28"
+    removal_condition: "Remove if controller/CI prevents completion without evidence in all target workflows."
+    status: active
+  - mechanism: curated-skill-catalog
+    type: skill
+    purpose: "Provide task-routed workflows without loading a large always-on manual."
+    failure_mode: "Context bloat from large AGENTS/CLAUDE files or ad-hoc prompts."
+    protected_invariant: "Context is routed, not accumulated."
+    validation_method: "HEB-C-001 and user review of skill trigger accuracy."
+    known_cost: "Skill drift and duplicate instructions across platforms."
+    owner: "platform-owner"
+    introduced_at: "2026-05-27"
+    last_reviewed: "2026-05-28"
+    removal_condition: "Merge or delete skills that are unused, duplicate another skill, or are superseded by native platform features."
+    status: active
+
+  - mechanism: skills-gate
+    type: controller-check
+    purpose: "Detect incomplete or unsynchronized skill content before skills are copied into Codex or Claude Code adapters."
+    failure_mode: "A skill names a workflow such as GitHub collaboration but omits required issue, commit, PR, evidence, or review structure."
+    protected_invariant: "Context routing stays useful; skills do not become vague or unsafe lifecycle authority."
+    validation_method: "harnessctl check --gate skills --strict and harness/tests/test_harnessctl.py."
+    known_cost: "Small phrase-level validator that must be updated when the curated skill catalog changes."
+    owner: "platform-owner"
+    introduced_at: "2026-05-28"
+    last_reviewed: "2026-05-28"
+    removal_condition: "Remove or replace if platform-native skill validation covers completeness, trigger scope, and mirror consistency."
+    status: active
+  - mechanism: minimal-worker-reviewer-subagents
+    type: reviewer
+    purpose: "Keep only the subagent roles required for generation/acceptance separation while avoiding resident planner, monitor, verifier, or explorer roles."
+    failure_mode: "Too many resident subagents create context routing overhead and unclear ownership without improving evidence or review quality."
+    protected_invariant: "Acceptance is separable from generation; mechanisms remain prunable and purpose-fit."
+    validation_method: "Adapter layout tests assert only worker and reviewer agents are present by default."
+    known_cost: "Some repositories may later need isolated explorer or verifier roles; those should be added only with a failure trace."
+    owner: "platform-owner"
+    introduced_at: "2026-05-28"
+    last_reviewed: "2026-05-28"
+    removal_condition: "Split roles only when HEB or real failures show reviewer independence, permission isolation, or throughput is insufficient."
+    status: active

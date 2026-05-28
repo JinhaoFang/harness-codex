@@ -1,0 +1,39 @@
+schema_version: heb.case.v0.1
+case_id: HEB-R-001
+title: "Recovery after forced session reset"
+category: recovery
+risk: medium
+fixture:
+  repo: fixtures/repo-small
+  start_commit: ""
+  setup_command: ""
+  validation_command: "python3 -m unittest discover"
+task:
+  user_intent: "Resume a partially completed Work Unit from artifacts only."
+  expected_outcome:
+    - "Outcome is satisfied in code and tests."
+  non_goals:
+    - "Do not rewrite unrelated modules."
+  allowed_paths:
+    - "src/**"
+    - "tests/**"
+  out_of_bounds:
+    - "infra/**"
+    - "secrets/**"
+required_evidence:
+  - id: EV1
+    type: targeted_test
+    description: "Run the relevant test or explain a waiver."
+fault_injection: []
+expected_process:
+  - "Use Work Unit Contract before implementation."
+  - "Record fresh evidence before completion."
+hard_gates:
+  - "No completion without evidence or waiver."
+metrics:
+  outcome: true
+  process: true
+  evidence: true
+  recovery: true
+  efficiency: true
+  human_burden: true

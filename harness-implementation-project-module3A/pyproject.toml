@@ -1,0 +1,9 @@
+[project]
+name = "coding-agent-harness-implementation"
+version = "0.1.0"
+description = "Portable implementation scaffold for coding-agent project harnesses"
+requires-python = ">=3.10"
+
+[tool.harness]
+profile = "controlled"
+controller = "harness/cli/harnessctl.py"

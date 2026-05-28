@@ -1,0 +1,54 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(git reset --hard)",
+      "Bash(git push --force*)",
+      "Bash(git push* main*)",
+      "Bash(git push* master*)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Bash(terraform apply*)",
+      "Bash(pulumi up*)",
+      "Bash(kubectl apply*)",
+      "Bash(kubectl delete*)",
+      "Bash(npm publish*)",
+      "Bash(pnpm publish*)"
+    ],
+    "allow": [
+      "Bash(python3 harness/cli/harnessctl.py *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Read(**)",
+      "Grep(**)",
+      "Glob(**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/harness/hooks/pre_tool_use_policy.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/harness/hooks/stop_without_evidence.py"
+          }
+        ]
+      }
+    ]
+  }
+}

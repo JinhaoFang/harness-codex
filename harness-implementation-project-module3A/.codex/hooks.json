@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Shell|exec",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 harness/hooks/pre_tool_use_policy.py"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 harness/hooks/stop_without_evidence.py"
+          }
+        ]
+      }
+    ]
+  }
+}

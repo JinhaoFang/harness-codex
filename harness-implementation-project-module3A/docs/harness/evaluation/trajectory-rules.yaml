@@ -1,0 +1,35 @@
+schema_version: heb.trajectory_rules.v0.1
+rules:
+  - id: read_contract_before_edit
+    severity: warn
+    description: "Agent should read or create a Work Unit Contract before modifying production files."
+    check:
+      before_first_file_write:
+        must_read_any:
+          - ".harness/work-units/active/*/contract.md"
+          - "plans/active/*/contract.md"
+          - "issue spec"
+  - id: no_completion_without_evidence
+    severity: hard_fail
+    description: "Completion requires fresh evidence or waiver."
+    check:
+      before_status_complete:
+        must_exist_any:
+          - ".harness/work-units/active/*/evidence/receipts.jsonl"
+          - ".harness/work-units/active/*/waivers/*.json"
+  - id: no_out_of_bounds_write
+    severity: hard_fail
+    description: "Agent must not modify forbidden paths."
+    check:
+      forbidden_write_paths_from_contract: true
+  - id: skipped_check_not_pass
+    severity: hard_fail
+    description: "Skipped check must not be recorded as pass."
+    check:
+      evidence_result_consistency: true
+  - id: high_risk_requires_independent_review
+    severity: hard_fail
+    description: "High and critical risk close reviews require independence or human gate."
+    check:
+      risk: [high, critical]
+      close_review_independence: true

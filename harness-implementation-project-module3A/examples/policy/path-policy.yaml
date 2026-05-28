@@ -1,0 +1,18 @@
+schema_version: harness.path_policy.v1
+rules:
+  - id: no-auth-without-high-risk-gate
+    paths:
+      - "src/auth/**"
+      - "src/permissions/**"
+    minimum_risk: high
+    requires:
+      - independent_review
+      - targeted_negative_tests
+  - id: no-billing-without-human-gate
+    paths:
+      - "src/billing/**"
+      - "payments/**"
+    minimum_risk: high
+    requires:
+      - human_gate
+      - rollback_or_reopen_path

@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Harness Evidence Receipt",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "receipt_id",
+    "work_unit_id",
+    "claim_ref",
+    "actor",
+    "type",
+    "result",
+    "started_at",
+    "ended_at",
+    "head_commit",
+    "diff_hash",
+    "base_commit",
+    "changed_files",
+    "verification_scope",
+    "freshness_basis"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "harness.evidence_receipt.v2.1"
+    },
+    "receipt_id": {
+      "type": "string"
+    },
+    "work_unit_id": {
+      "type": "string"
+    },
+    "claim_ref": {
+      "type": "string"
+    },
+    "actor": {
+      "enum": [
+        "agent",
+        "controller",
+        "ci",
+        "human",
+        "reviewer"
+      ]
+    },
+    "type": {
+      "enum": [
+        "unit",
+        "integration",
+        "typecheck",
+        "lint",
+        "e2e",
+        "runtime",
+        "migration",
+        "benchmark",
+        "security",
+        "manual",
+        "test",
+        "review"
+      ]
+    },
+    "command": {
+      "type": "string"
+    },
+    "result": {
+      "enum": [
+        "pass",
+        "fail",
+        "skipped"
+      ]
+    },
+    "started_at": {
+      "type": "string"
+    },
+    "ended_at": {
+      "type": "string"
+    },
+    "exit_code": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "base_commit": {
+      "type": "string"
+    },
+    "head_commit": {
+      "type": "string"
+    },
+    "diff_hash": {
+      "type": "string"
+    },
+    "changed_files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "covers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "verification_scope": {
+      "type": "string"
+    },
+    "freshness_basis": {
+      "type": "string"
+    },
+    "artifact_uri": {
+      "type": "string"
+    },
+    "waiver_ref": {
+      "type": "string"
+    },
+    "note": {
+      "type": "string"
+    },
+    "artifact_hash": {
+      "type": "string"
+    },
+    "command_log_ref": {
+      "type": "string"
+    },
+    "manual_artifact_ref": {
+      "type": "string"
+    },
+    "environment_ref": {
+      "type": "string"
+    },
+    "last_relevant_change_at": {
+      "type": "string"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "schema_version": "harness.review_verdict.v1",
+  "review_id": "",
+  "work_unit_id": "",
+  "mode": "close",
+  "reviewer_role": "reviewer-agent",
+  "builder_role": "agent",
+  "independence_level": "fresh_context",
+  "is_independent": true,
+  "decision": "CHANGES_REQUESTED",
+  "reviewed_contract_ref": "contract.md",
+  "reviewed_diff_ref": "git diff",
+  "evidence_refs": [],
+  "scope_check": {},
+  "risk_check": {},
+  "findings": [],
+  "required_rework": [],
+  "created_at": ""
+}

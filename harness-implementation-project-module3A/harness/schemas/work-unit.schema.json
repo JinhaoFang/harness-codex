@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Harness Work Unit State",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "work_unit_id",
+    "status",
+    "risk",
+    "branch",
+    "head_commit",
+    "changed_files",
+    "updated_at",
+    "base_commit",
+    "started_at_head",
+    "diff_hash"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "harness.work_unit_state.v1"
+    },
+    "work_unit_id": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "specified",
+        "ready",
+        "running",
+        "verifying",
+        "reviewing",
+        "integrating",
+        "handoff",
+        "archived",
+        "blocked"
+      ]
+    },
+    "risk": {
+      "enum": [
+        "trivial",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "branch": {
+      "type": "string"
+    },
+    "worktree": {
+      "type": "string"
+    },
+    "head_commit": {
+      "type": "string"
+    },
+    "diff_hash": {
+      "type": "string"
+    },
+    "changed_files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "latest_evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "known_failures": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_safe_action": {
+      "type": "string"
+    },
+    "rollback_or_reopen_path": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string"
+    },
+    "base_commit": {
+      "type": "string"
+    },
+    "started_at_head": {
+      "type": "string"
+    },
+    "no_next_step_reason": {
+      "type": "string"
+    }
+  }
+}
