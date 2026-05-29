@@ -1,38 +1,45 @@
-# Agentic Codex Runtime v3
-
-**English** | [中文](README.zh-CN.md)
+# Coding Agent Project Harness
 
 > Make AI coding agent development **reproducible, verifiable, reversible, resumable, and evolvable** — without context rot.
 
 ## What is this?
 
-A deterministic runtime framework for AI coding agents (Codex, Claude, etc.). It provides:
+A portable implementation scaffold for using Codex, Claude Code, or similar coding agents in real codebases without turning the harness into a second product.
 
-- **Truth Model** — Clear separation between Goal truth (`plan.md`), Process truth (`workflow.md`), and World truth (code/tests/runtime).
-- **Controller** — A CLI tool (`agentctl.py`) that enforces gates, manages state transitions, and produces verifiable artifacts.
-- **Skills** — Pluggable stage/method/review skills (world-grounding, freeze-plan, execute-subtask, tdd, plan-review, close-review, ...).
-- **Subagent Coordination** — Structured handoff contracts for multi-agent collaboration with bootstrapping and context recovery.
+The implementation is intentionally **controller-light but invariant-heavy**:
+
+- The repository and runtime remain the source of project truth
+- Non-trivial work starts from a Work Unit Contract
+- Agent work is bounded by explicit write and risk boundaries
+- Completion requires fresh evidence or a waiver
+- Review verdicts are separated from evidence receipts
+- Handoff and state are generated from authoritative artifacts, not chat summaries
+- Every non-trivial mechanism has a purpose, validation method, cost, and removal condition
 
 ## Repository Structure
 
 ```
 codex_harness/
-├── agentic_codex_runtime_v3_fusion/   # Main runtime package (copy to target repo root)
-│   ├── AGENTS.md                       # Project-level agent protocol
-│   ├── AGENTS.global.md                # Global template (~/.codex/AGENTS.md)
-│   ├── .codex/
-│   │   ├── config.toml                 # Codex config & agent registry
-│   │   ├── agents/                     # Subagent role definitions
-│   │   ├── tools/agentctl.py           # Deterministic control plane
-│   │   └── templates/                  # Plan, workflow, evidence, review templates
-│   ├── .agents/skills/                 # Runtime skills
-│   ├── .agentdocs/                     # Task workspace (SSOT)
-│   ├── .github/workflows/              # CI guardrails
-│   └── docs/agentic/spec/              # Design specifications
-└── docs/                               # Reference materials & migration guides
+├── harness-implementation-project-module3A/  # Main harness implementation (copy to target repo)
+│   ├── README.md                              # Project overview
+│   ├── CLAUDE.md                              # Claude Code project guide
+│   ├── AGENTS.md                              # Codex project guide
+│   ├── .harness/                              # Work Unit lifecycle, evidence, reviews
+│   ├── harness/cli/harnessctl.py              # Controller CLI
+│   ├── harness/hooks/                         # Deterministic guard scripts
+│   ├── harness/schemas/                       # JSON schemas for artifacts
+│   ├── harness/templates/                    # Contract, handoff, review templates
+│   ├── skills/                                # Platform-neutral skill catalog
+│   ├── .claude/                               # Claude Code adapter examples
+│   ├── .codex/                                # Codex adapter examples
+│   └── docs/harness/                          # Detailed lifecycle docs
+├── docs/                                      # Reference materials
+│   ├── coding_agent_project_harness_standard_v0.6.2.md
+│   └── harness_engineering_tutorial_v0.6.0.md
+└── reference_project/                          # Reference implementations
 ```
 
-## Quick Start
+## Fast Start
 
 ### Prerequisites
 
@@ -42,85 +49,80 @@ codex_harness/
 
 ### Install into a Target Repository
 
-1. Copy the runtime package to your project root:
+Use `scripts/adopt.py` to copy only the layer your target repository needs:
 
-   ```bash
-   cp -r agentic_codex_runtime_v3_fusion/* /path/to/your-project/
-   ```
-
-2. (Optional) Set up the global protocol:
-
-   ```bash
-   cp agentic_codex_runtime_v3_fusion/AGENTS.global.md ~/.codex/AGENTS.md
-   ```
-
-3. Initialize the runtime workspace:
-
-   ```bash
-   python .codex/tools/agentctl.py init-agentdocs
-   ```
-
-4. Create your first task:
-
-   ```bash
-   python .codex/tools/agentctl.py create-task --slug my-first-task --title "My first task"
-   ```
-
-5. (Optional) Enable repo guardrails:
-
-   ```bash
-   bash .githooks/install.sh
-   ```
-
-### Recommended Workflow
-
-```
-Discuss → world-grounding → freeze-plan → refresh-subtask-pack
-  → (optional: plan-eng-review) → plan-review
-  → execute-subtask (+ tdd for code tasks)
-  → evidence-capture → close-review → archive
+```bash
+cd harness-implementation-project-module3A
+python3 scripts/adopt.py /path/to/repo --profile thin
 ```
 
-## Architecture Principles
+Adoption profiles:
 
-| Principle | Description |
-|-----------|-------------|
-| **Truth separation** | `plan.md` = Goal, `workflow.md` = Process, code/tests = World |
-| **Deterministic control** | `agentctl.py` handles state transitions; agent handles judgment |
-| **Pluggable skills** | Core stages + optional method/review skills |
-| **Independent review** | Reviews use fresh context, never self-review |
-| **TDD as method** | Required for all code-bearing development tasks |
-| **Subagent bootstrap** | Subagents self-reconstruct context from `.agentdocs/*` |
+| Profile | Description |
+|---------|-------------|
+| **thin** | Portable entry files, core controller, hooks, schemas, templates, essential docs, minimal skills |
+| **controlled** | thin + tests, CI example, full lifecycle skill set |
+| **codex** | controlled + Codex platform adapter |
+| **claude** | controlled + Claude Code platform adapter |
+| **full** | All default runtime examples |
+
+### Quick Workflow
+
+```bash
+# Initialize
+python3 harness/cli/harnessctl.py init
+
+# Create a Work Unit
+python3 harness/cli/harnessctl.py new --id WU-001 --title "Fix login redirect" --type bugfix --risk medium
+
+# Check status
+python3 harness/cli/harnessctl.py status --id WU-001
+
+# After implementation
+python3 harness/cli/harnessctl.py evidence --id WU-001 --claim EV1 --type test --result pass --command "pytest tests/test_login.py" --command-log-ref ".harness/work-units/active/WU-001/evidence/artifacts/pytest-login.log"
+python3 harness/cli/harnessctl.py validate --id WU-001 --strict
+python3 harness/cli/harnessctl.py check --id WU-001 --gate verification
+```
+
+## Core Loop
+
+```
+Clarify -> Work Unit Contract -> Context Routing -> Plan Review when needed -> Implementation -> Evidence -> Verification -> Close Review -> CI Gate -> Handoff or Archive
+```
+
+## Adoption Profiles
+
+| Target profile | Copy first | Add only when needed |
+|---|---|---|
+| Thin Local Harness | `AGENTS.md`, `CLAUDE.md`, `docs/harness/README.md`, `harness/cli/harnessctl.py`, selected skills | hooks, review agents |
+| Controlled Repo Harness | Thin + `.harness` lifecycle, evidence receipts, scope checks, close review workflow | CI gates, path policy |
+| Risk-Aware Harness | Controlled + waiver model, human gate, deny/ask permissions, boundary hooks | policy-as-code, security review |
+| Scaled Multi-Agent Harness | Risk-aware + issue/PR discipline, minimal worker/reviewer subagents, worktrees, HEB evaluation | scheduler/orchestrator |
 
 ## Documentation
 
-- [Design Specifications](agentic_codex_runtime_v3_fusion/docs/agentic/spec/) — Numbered spec documents (00-08)
-- [Controller Reference](agentic_codex_runtime_v3_fusion/docs/agentic/reference/) — Command reference and overview
-- [Fusion Decision Checklist](agentic_codex_runtime_v3_fusion/docs/agentic/spec/08-fusion-decision-checklist.md) — Which modules are core vs optional
-- [Reference Materials](docs/references/) — Agent engineering guides and design references
+- [Harness Standard (v0.6.2)](docs/coding_agent_project_harness_standard_v0.6.2.md) — Core standard, capability model, and reference profiles
+- [Harness Engineering Tutorial (v0.6.0)](docs/harness_engineering_tutorial_v0.6.0.md) — Why, how to evaluate, how to adopt, how to avoid over-engineering
+- [Harness Implementation Guide](harness-implementation-project-module3A/docs/harness/README.md) — Detailed lifecycle documentation
 
 ## Core Skills
 
-| Skill | Stage | Description |
-|-------|-------|-------------|
-| `world-grounding` | Ground | Anchor task in current codebase reality |
-| `freeze-plan` | Plan | Write and freeze `plan.md` as Goal truth |
-| `refresh-subtask-pack` | Plan | Generate derived subtask packs |
-| `plan-review` | Review | Independent plan review verdict |
-| `execute-subtask` | Execute | Implement a grounded subtask |
-| `evidence-capture` | Execute | Capture verification evidence |
-| `close-review` | Review | Independent close review verdict |
-| `reopen-fix` | Fix | Reopen with scope change reason |
+| Skill | Purpose |
+|-------|---------|
+| `harness-clarify` | Clarify ambiguous work before implementation |
+| `harness-spec` | Create/lock/amend Work Unit Contracts |
+| `harness-ground` | Establish repository truth and context |
+| `harness-tdd` | Behavior-first test-driven development |
+| `harness-evidence` | Capture claim-relative evidence receipts |
+| `harness-review` | Plan, close, risk, security, or architecture review |
+| `harness-github` | GitHub issues, branches, commits, PRs integration |
+| `harness-handoff` | Generate recoverable handoffs |
+| `harness-compound` | Convert failures into durable assets or pruning decisions |
+| `harness-waiver` | Create scoped human-approved waivers |
 
-## Optional Modules
+## What this project is not
 
-- `tdd` — Test-driven development method overlay
-- `subagent-bootstrap` — Self-context reconstruction for subagents
-- `plan-eng-review` — Owner-side engineering challenge (not a gate)
-- `worktree-isolation` — Parallel execution in isolated git worktrees
-- `session-recovery` — Cross-session context recovery
-- `github-collaboration` — Issue/PR traceability with `gh` CLI
-- `contract-artifacts` — Long-lived business/API/UI contracts
+It is not a universal agent platform, a mandatory directory standard, or a replacement for project-specific engineering judgment. It provides a small set of enforceable invariants and adapter examples that can be copied, removed, or thickened according to real failure traces.
 
 ## Contributing
 
