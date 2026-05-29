@@ -7,7 +7,7 @@ This file is a short project map for Claude Code. It routes Claude toward the ri
 - Treat this repository as a portable coding-agent harness implementation, not a business application.
 - Keep active task state in `.harness/work-units/active/<WU-ID>/`, not in this file.
 - Keep detailed lifecycle guidance in `docs/harness/`; keep reusable Claude procedures in `.claude/skills/` when the Claude profile is adopted.
-- When copied into another repository, update project-specific commands, permissions, and risk boundaries before relying on it.
+- Do not copy this file into target repositories. `scripts/adopt.py` uses `harness/templates/adoption/CLAUDE.md` as the target-project entrypoint.
 
 ## 2. Operating Principles
 

@@ -5,54 +5,41 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 import shutil
+from typing import Union
 
-COMMON_PATHS = [
-    "AGENTS.md",
-    "CLAUDE.md",
+PathSpec = Union[str, tuple[str, str]]
+
+ADOPTION_DOCS: list[PathSpec] = [
+    ("harness/templates/adoption/AGENTS.md", "AGENTS.md"),
+    ("harness/templates/adoption/CLAUDE.md", "CLAUDE.md"),
+]
+
+COMMON_PATHS: list[PathSpec] = [
+    *ADOPTION_DOCS,
     "docs/harness/README.md",
     "docs/harness/workflow.md",
     "docs/harness/risk-gates.md",
-    "docs/harness/platform-adapters.md",
     "harness/cli",
     "harness/hooks",
     "harness/schemas",
     "harness/templates",
 ]
 
-THIN_SKILLS = [
-    "skills/harness-clarify",
-    "skills/harness-evidence",
-    "skills/harness-handoff",
-]
-
-CONTROLLED_PATHS = [
+CONTROLLED_PATHS: list[PathSpec] = [
     "harness/tests",
     ".github/workflows/harness-checks.yml",
     "Makefile",
 ]
 
-CONTROLLED_SKILLS = [
-    "skills/harness-clarify",
-    "skills/harness-compound",
-    "skills/harness-evidence",
-    "skills/harness-ground",
-    "skills/harness-handoff",
-    "skills/harness-review",
-    "skills/harness-spec",
-    "skills/harness-tdd",
-    "skills/harness-waiver",
-]
-
-GITHUB_SKILL = "skills/harness-github"
-CODEX_PATHS = [".agents/skills", ".codex", "docs/harness/platform-adapters.md"]
-CLAUDE_PATHS = [".claude", "docs/harness/platform-adapters.md"]
+CODEX_PATHS: list[PathSpec] = [".agents/skills", ".codex", "docs/harness/platform-adapters.md"]
+CLAUDE_PATHS: list[PathSpec] = [".claude", "docs/harness/platform-adapters.md"]
 
 PROFILES = {
-    "thin": COMMON_PATHS + THIN_SKILLS,
-    "controlled": COMMON_PATHS + CONTROLLED_PATHS + CONTROLLED_SKILLS,
-    "codex": COMMON_PATHS + CONTROLLED_PATHS + CONTROLLED_SKILLS + CODEX_PATHS,
-    "claude": COMMON_PATHS + CONTROLLED_PATHS + CONTROLLED_SKILLS + CLAUDE_PATHS,
-    "full": COMMON_PATHS + CONTROLLED_PATHS + CONTROLLED_SKILLS + [GITHUB_SKILL] + CODEX_PATHS + CLAUDE_PATHS + ["examples"],
+    "thin": COMMON_PATHS,
+    "controlled": COMMON_PATHS + CONTROLLED_PATHS,
+    "codex": COMMON_PATHS + CONTROLLED_PATHS + CODEX_PATHS,
+    "claude": COMMON_PATHS + CONTROLLED_PATHS + CLAUDE_PATHS,
+    "full": COMMON_PATHS + CONTROLLED_PATHS + CODEX_PATHS + CLAUDE_PATHS + ["examples"],
 }
 
 MERGE_SENSITIVE_PATHS = {
@@ -66,36 +53,61 @@ MERGE_SENSITIVE_PATHS = {
 }
 
 
-def copy_path(src_root: Path, dst_root: Path, rel: str, force: bool, dry_run: bool) -> str:
-    src = src_root / rel
-    dst = dst_root / rel
+def split_path_spec(spec: PathSpec) -> tuple[str, str]:
+    if isinstance(spec, tuple):
+        return spec
+    return spec, spec
+
+
+def path_spec_key(spec: PathSpec) -> str:
+    _src, dst = split_path_spec(spec)
+    return dst
+
+
+def copy_path(src_root: Path, dst_root: Path, spec: PathSpec, force: bool, dry_run: bool) -> str:
+    src_rel, dst_rel = split_path_spec(spec)
+    src = src_root / src_rel
+    dst = dst_root / dst_rel
     if not src.exists():
-        return f"missing {rel}"
+        return f"missing {src_rel}"
     if dst.exists():
         if not force:
-            note = "merge-sensitive; " if rel in MERGE_SENSITIVE_PATHS or rel.split("/", 1)[0] in {".codex", ".claude"} else ""
-            return f"skip existing {rel} ({note}use --force to replace)"
+            note = "merge-sensitive; " if dst_rel in MERGE_SENSITIVE_PATHS or dst_rel.split("/", 1)[0] in {".codex", ".claude"} else ""
+            return f"skip existing {dst_rel} ({note}use --force to replace)"
         if dry_run:
-            return f"would replace {rel}"
+            return f"would replace {dst_rel}"
         if dst.is_dir():
             shutil.rmtree(dst)
         else:
             dst.unlink()
     elif dry_run:
-        return f"would copy {rel}"
+        return f"would copy {dst_rel}"
     dst.parent.mkdir(parents=True, exist_ok=True)
     if src.is_dir():
         shutil.copytree(src, dst)
     else:
         shutil.copy2(src, dst)
-    return f"copied {rel}"
+    if src_rel != dst_rel:
+        return f"copied {src_rel} -> {dst_rel}"
+    return f"copied {dst_rel}"
 
 
-def profile_paths(profile: str, include_github: bool) -> list[str]:
+def skill_paths(src_root: Path) -> list[PathSpec]:
+    skills_root = src_root / "skills"
+    if not skills_root.exists():
+        return []
+    return [str(path.relative_to(src_root)) for path in sorted(skills_root.iterdir(), key=lambda p: p.name)]
+
+
+def profile_paths(src_root: Path, profile: str, include_github: bool) -> list[PathSpec]:
     paths = list(PROFILES[profile])
-    if include_github and GITHUB_SKILL not in paths:
-        paths.append(GITHUB_SKILL)
-    return sorted(dict.fromkeys(paths))
+    paths.extend(skill_paths(src_root))
+    if include_github:
+        # Kept for CLI compatibility. GitHub skill is now part of the canonical
+        # skills catalog copied by every profile.
+        pass
+    deduped = list(dict.fromkeys(paths))
+    return sorted(deduped, key=path_spec_key)
 
 
 def main() -> int:
@@ -111,7 +123,7 @@ def main() -> int:
     print(f"adopting profile={args.profile} into {dst_root}")
     if args.profile in {"codex", "claude", "full"}:
         print("note: platform adapter files can conflict with existing project settings; prefer merge review over blind --force.")
-    for rel in profile_paths(args.profile, args.include_github):
+    for rel in profile_paths(src_root, args.profile, args.include_github):
         print(copy_path(src_root, dst_root, rel, args.force, args.dry_run))
     return 0
 

@@ -123,6 +123,15 @@ Fix a bounded test behavior.
 
 - Scope needs to cross secrets/**.
 
+## Clarification record
+
+- user_confirmed: yes
+- repo_grounded: yes
+- user_intent_confidence: 95
+- project_reality_confidence: 95
+- key_decisions: Test behavior and evidence surface are confirmed.
+- remaining_assumptions: none
+
 ## Open questions
 
 - {open_questions}
@@ -144,6 +153,10 @@ class HarnessCtlTests(unittest.TestCase):
         root = make_repo()
         try:
             run(root, "init")
+            gitignore = root / ".gitignore"
+            self.assertEqual(gitignore.read_text(encoding="utf-8").splitlines().count(".harness/"), 1)
+            run(root, "init")
+            self.assertEqual(gitignore.read_text(encoding="utf-8").splitlines().count(".harness/"), 1)
             run(root, "new", "--id", "WU-1", "--title", "Test", "--type", "bugfix", "--risk", "low")
             set_required_evidence(root, "WU-1", ["EV1", "EV2"])
 
@@ -172,6 +185,16 @@ class HarnessCtlTests(unittest.TestCase):
             self.assertEqual(out["decision"], "block")
             self.assertIn("verification gate", out["reason"])
             self.assertNotIn("hookSpecificOutput", out)
+
+            run(root, "new", "--id", "WU-STOP-REVIEW", "--title", "Stop Review", "--type", "bugfix", "--risk", "medium")
+            fill_contract(root, "WU-STOP-REVIEW")
+            (root / "src").mkdir(exist_ok=True)
+            (root / "src" / "stop_review.py").write_text("value = 1\n", encoding="utf-8")
+            run(root, "evidence", "--id", "WU-STOP-REVIEW", "--claim", "EV1", "--type", "test", "--result", "pass", "--command", "true", "--command-log-ref", ".harness/work-units/active/WU-STOP-REVIEW/evidence/artifacts/test.log")
+            proc = subprocess.run([sys.executable, str(hook)], cwd=root, text=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            out = json.loads(proc.stdout)
+            self.assertEqual(out["decision"], "block")
+            self.assertIn("close review gate", out["reason"])
 
             with self.assertRaises(harnessctl.HarnessError) as ctx:
                 harnessctl.submit_review(argparse.Namespace(
@@ -335,6 +358,8 @@ class HarnessCtlTests(unittest.TestCase):
             run(root, "init")
             proc = run(root, "ci", "--strict")
             self.assertIn('"decision": "PASS"', proc.stdout)
+            subprocess.run(["git", "add", ".gitignore"], cwd=root, check=True, timeout=10)
+            subprocess.run(["git", "commit", "-m", "test: ignore harness runtime state"], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=10)
 
             proc = run(root, "ci", "--strict", "--require-active", check=False)
             self.assertEqual(proc.returncode, 2)
@@ -361,6 +386,91 @@ class HarnessCtlTests(unittest.TestCase):
             run(root, "submit-review", "--id", "WU-CI", "--mode", "close", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context", "--evidence-ref", receipt_id)
             proc = run(root, "ci", "--strict")
             self.assertIn('"decision": "PASS"', proc.stdout)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_spec_gate_blocks_unconfirmed_clarification_record(self):
+        root = make_repo()
+        try:
+            run(root, "init")
+            run(root, "new", "--id", "WU-CLARIFY", "--title", "Clarify", "--type", "bugfix", "--risk", "medium")
+            fill_contract(root, "WU-CLARIFY")
+            contract = root / ".harness" / "work-units" / "active" / "WU-CLARIFY" / "contract.md"
+            contract.write_text(contract.read_text(encoding="utf-8").replace("user_confirmed: yes", "user_confirmed: no"), encoding="utf-8")
+            proc = run(root, "check", "--id", "WU-CLARIFY", "--gate", "spec", "--strict", check=False)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("user_confirmed", proc.stdout)
+
+            contract.write_text(contract.read_text(encoding="utf-8").replace("user_confirmed: no", "user_confirmed: yes").replace("project_reality_confidence: 95", "project_reality_confidence: 90"), encoding="utf-8")
+            proc = run(root, "check", "--id", "WU-CLARIFY", "--gate", "spec", "--strict", check=False)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("project_reality_confidence", proc.stdout)
+
+            contract.write_text(contract.read_text(encoding="utf-8").replace("project_reality_confidence: 90", "project_reality_confidence: 95"), encoding="utf-8")
+            proc = run(root, "check", "--id", "WU-CLARIFY", "--gate", "spec", "--strict")
+            self.assertIn('"decision": "PASS"', proc.stdout)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_spec_gate_accepts_nested_list_contract_fields(self):
+        root = make_repo()
+        try:
+            run(root, "init")
+            run(root, "new", "--id", "WU-NESTED", "--title", "Nested", "--type", "bugfix", "--risk", "medium")
+            fill_contract(root, "WU-NESTED")
+            contract = root / ".harness" / "work-units" / "active" / "WU-NESTED" / "contract.md"
+            text = contract.read_text(encoding="utf-8")
+            text = text.replace(
+                """## Required evidence
+
+- id: EV1
+  claim: Targeted test passes.
+  command: python3 -m unittest
+  required_for_completion: true
+""",
+                """## Required evidence
+
+- id: EV1
+  claim:
+    - Targeted test passes.
+  command:
+    - python3 -m unittest
+  required_for_completion: true
+""",
+            )
+            text = text.replace(
+                """## Clarification record
+
+- user_confirmed: yes
+- repo_grounded: yes
+- user_intent_confidence: 95
+- project_reality_confidence: 95
+- key_decisions: Test behavior and evidence surface are confirmed.
+- remaining_assumptions: none
+""",
+                """## Clarification record
+
+- user_confirmed:
+  - yes
+- repo_grounded:
+  - yes
+- user_intent_confidence:
+  - 95
+- project_reality_confidence:
+  - 95
+- key_decisions:
+  - Test behavior and evidence surface are confirmed.
+- remaining_assumptions:
+  - none
+""",
+            )
+            contract.write_text(text, encoding="utf-8")
+
+            proc = run(root, "check", "--id", "WU-NESTED", "--gate", "spec", "--strict")
+            self.assertIn('"decision": "PASS"', proc.stdout)
+            items = harnessctl.required_evidence_items(root / ".harness" / "work-units" / "active" / "WU-NESTED")
+            self.assertEqual(items[0]["claim"], "Targeted test passes.")
+            self.assertEqual(items[0]["command"], "python3 -m unittest")
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
@@ -470,6 +580,14 @@ class HarnessCtlTests(unittest.TestCase):
             self.assertIn("profile=thin", thin_proc.stdout)
             self.assertTrue((thin / "AGENTS.md").exists())
             self.assertTrue((thin / "CLAUDE.md").exists())
+            agents_text = (thin / "AGENTS.md").read_text(encoding="utf-8")
+            claude_text = (thin / "CLAUDE.md").read_text(encoding="utf-8")
+            self.assertIn("Clarify Before Spec", agents_text)
+            self.assertIn(".harness/config.json", agents_text)
+            self.assertIn(".harness/current", agents_text)
+            self.assertIn(".harness/config.json", claude_text)
+            self.assertIn(".harness/current", claude_text)
+            self.assertNotIn("portable coding-agent harness implementation", agents_text)
             self.assertTrue((thin / "docs" / "harness" / "README.md").exists())
             self.assertTrue((thin / "docs" / "harness" / "workflow.md").exists())
             self.assertTrue((thin / "docs" / "harness" / "risk-gates.md").exists())
@@ -480,7 +598,8 @@ class HarnessCtlTests(unittest.TestCase):
             self.assertFalse((thin / "docs" / "harness" / "source-analysis.md").exists())
             self.assertTrue((thin / "harness" / "cli" / "harnessctl.py").exists())
             self.assertTrue((thin / "skills" / "harness-clarify" / "SKILL.md").exists())
-            self.assertFalse((thin / "skills" / "harness-review").exists())
+            self.assertTrue((thin / "skills" / "harness-review" / "SKILL.md").exists())
+            self.assertTrue((thin / "skills" / "harness-github" / "SKILL.md").exists())
             self.assertFalse((thin / ".codex").exists())
             self.assertFalse((thin / ".claude").exists())
 

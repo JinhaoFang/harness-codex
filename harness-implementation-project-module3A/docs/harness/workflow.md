@@ -61,6 +61,8 @@ Plan review checks whether the execution plan is grounded in repository truth be
 
 For medium or higher risk, `running` requires a passing plan review or explicit self-check downgrade where allowed. For high or critical risk, use independent review or human gate. For medium or higher risk, a passing close review must cite the fresh evidence receipt IDs it relied on.
 
+On Codex, subagents are explicit. When a Work Unit requires reviewer or worker isolation, the main agent must start the reviewer/worker directly and wait for the result before continuing; do not rely on automatic delegation.
+
 Gates:
 
 ```bash

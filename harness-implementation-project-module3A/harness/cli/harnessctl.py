@@ -240,6 +240,21 @@ def update_state(root: Path, wu_path: Path, **patch: Any) -> Dict[str, Any]:
     return state
 
 
+def clean_scalar(value: str) -> str:
+    value = value.strip()
+    if value.startswith("- "):
+        value = value[2:].strip()
+    return value.strip().strip('"').strip("'")
+
+
+def append_field_value(values: Dict[str, str], key: str, value: str) -> None:
+    cleaned = clean_scalar(value)
+    if not cleaned:
+        return
+    current = values.get(key, "").strip()
+    values[key] = f"{current}; {cleaned}" if current else cleaned
+
+
 def parse_yaml_header(text: str) -> Dict[str, str]:
     if "```yaml" not in text:
         return {}
@@ -249,7 +264,7 @@ def parse_yaml_header(text: str) -> Dict[str, str]:
         if ":" not in line:
             continue
         key, value = line.split(":", 1)
-        out[key.strip()] = value.strip().strip('"').strip("'")
+        out[key.strip()] = clean_scalar(value)
     return out
 
 
@@ -307,7 +322,7 @@ def contract_summary(wu_path: Path, max_chars: int = 700) -> str:
         return "Missing contract.md"
     text = path.read_text(encoding="utf-8")
     summary = []
-    for heading in ("## Intent", "## Expected Outcome", "## Scope", "## Required evidence", "## Open questions"):
+    for heading in ("## Intent", "## Expected Outcome", "## Scope", "## Required evidence", "## Clarification record", "## Open questions"):
         section = "\n".join(get_section_lines(text, heading)).strip()
         if section:
             summary.append(f"{heading}\n{section}")
@@ -359,7 +374,94 @@ def glob_matches(path: str, patterns: Iterable[str]) -> bool:
 def parse_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
-    return str(value).strip().lower() in {"true", "yes", "1", "required"}
+    return str(value).strip().lower() in {"true", "yes", "1", "required", "confirmed"}
+
+
+def parse_percent(value: Any) -> Optional[float]:
+    text = str(value).strip().rstrip("%")
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def section_key_values(text: str, heading: str) -> Dict[str, str]:
+    values: Dict[str, str] = {}
+    key_re = re.compile(r"^-?\s*([A-Za-z][A-Za-z0-9 _-]*)\s*:\s*(.*)$")
+    current_key = ""
+    current_indent = 0
+    for raw in get_section_lines(text, heading):
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("### "):
+            continue
+        indent = len(raw) - len(raw.lstrip())
+        if current_key and indent > current_indent:
+            append_field_value(values, current_key, stripped)
+            continue
+        match = key_re.match(stripped)
+        if not match:
+            if current_key and (raw.startswith(" ") or raw.startswith("\t") or stripped.startswith("- ")):
+                append_field_value(values, current_key, stripped)
+            continue
+        key = match.group(1).strip().lower().replace("-", "_").replace(" ", "_")
+        values[key] = clean_scalar(match.group(2))
+        current_key = key
+        current_indent = indent
+    return values
+
+
+def check_clarification_record(text: str, non_trivial: bool) -> Tuple[List[str], List[str]]:
+    blocking: List[str] = []
+    warnings: List[str] = []
+    if "## Clarification record" not in text:
+        msg = "Missing heading: ## Clarification record. Open questions alone do not prove clarify happened."
+        if non_trivial:
+            blocking.append(msg)
+        else:
+            warnings.append(msg)
+        return blocking, warnings
+
+    values = section_key_values(text, "## Clarification record")
+    requirements = {
+        "user_confirmed": "Clarification record must set user_confirmed: yes before locking non-trivial work.",
+        "repo_grounded": "Clarification record must set repo_grounded: yes after inspecting relevant project truth.",
+    }
+    for key, message in requirements.items():
+        if not parse_bool(values.get(key, "")):
+            if non_trivial:
+                blocking.append(message)
+            else:
+                warnings.append(message)
+
+    confidence_requirements = {
+        "user_intent_confidence": "user_intent_confidence must be at least 95 before locking non-trivial work.",
+        "project_reality_confidence": "project_reality_confidence must be at least 95 before locking non-trivial work.",
+    }
+    for key, message in confidence_requirements.items():
+        score = parse_percent(values.get(key, ""))
+        if score is None or score < 95:
+            if non_trivial:
+                blocking.append(message)
+            else:
+                warnings.append(message)
+
+    assumptions = values.get("remaining_assumptions", "")
+    if not assumptions:
+        msg = "Clarification record must include remaining_assumptions; use none only when no material assumptions remain."
+        if non_trivial:
+            blocking.append(msg)
+        else:
+            warnings.append(msg)
+    elif not (is_empty_marker(assumptions) or assumptions.lower().startswith("accepted:")):
+        msg = "remaining_assumptions must be none/resolved or explicitly accepted; unresolved assumptions block spec lock."
+        if non_trivial:
+            blocking.append(msg)
+        else:
+            warnings.append(msg)
+
+    if not values.get("key_decisions") or is_empty_marker(values.get("key_decisions", "")):
+        warnings.append("Clarification record has no key_decisions. Record at least one decision or why none were needed.")
+    return blocking, warnings
 
 
 def required_evidence_items(wu_path: Path) -> List[Dict[str, Any]]:
@@ -383,12 +485,25 @@ def required_evidence_items(wu_path: Path) -> List[Dict[str, Any]]:
     lines = get_section_lines(text, "## Required evidence")
     items: List[Dict[str, Any]] = []
     cur: Optional[Dict[str, Any]] = None
+    current_field = ""
+    current_field_indent = 0
     simple_id_re = re.compile(r"^-\s*([A-Za-z][A-Za-z0-9_.:-]*)\s*:?(.*)$")
     key_re = re.compile(r"^(id|claim|command|required_for_completion|type|scope|covers)\s*:\s*(.*)$")
     for raw in lines:
         line = raw.rstrip()
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(raw) - len(raw.lstrip())
+        m = key_re.match(stripped)
+        if m and cur is not None:
+            key, value = m.group(1), m.group(2).strip()
+            cur[key] = clean_scalar(value)
+            current_field = key
+            current_field_indent = indent
+            continue
+        if cur is not None and current_field and indent > current_field_indent:
+            append_field_value(cur, current_field, stripped)
             continue
         if stripped.startswith("- "):
             body = stripped[2:].strip()
@@ -397,7 +512,9 @@ def required_evidence_items(wu_path: Path) -> List[Dict[str, Any]]:
             if body.startswith("id:"):
                 if cur:
                     items.append(cur)
-                cur = {"id": body.split(":", 1)[1].strip()}
+                cur = {"id": clean_scalar(body.split(":", 1)[1])}
+                current_field = "id"
+                current_field_indent = indent
                 continue
             m = simple_id_re.match(stripped)
             if m:
@@ -406,12 +523,12 @@ def required_evidence_items(wu_path: Path) -> List[Dict[str, Any]]:
                 ev_id, rest = m.group(1).strip(), m.group(2).strip()
                 cur = {"id": ev_id}
                 if rest:
-                    cur["claim"] = rest
+                    cur["claim"] = clean_scalar(rest)
+                    current_field = "claim"
+                else:
+                    current_field = "id"
+                current_field_indent = indent
                 continue
-        m = key_re.match(stripped)
-        if m and cur is not None:
-            key, value = m.group(1), m.group(2).strip()
-            cur[key] = value
     if cur:
         items.append(cur)
 
@@ -488,10 +605,24 @@ def review_verdicts(wu_path: Path) -> List[Dict[str, Any]]:
     return out
 
 
+def ensure_gitignore_entry(root: Path, entry: str) -> None:
+    path = root / ".gitignore"
+    if path.exists():
+        text = path.read_text(encoding="utf-8")
+        lines = [line.strip() for line in text.splitlines()]
+        if entry.rstrip("/") in lines or entry in lines:
+            return
+        prefix = "" if text.endswith("\n") or not text else "\n"
+        path.write_text(text + prefix + entry + "\n", encoding="utf-8")
+        return
+    path.write_text(entry + "\n", encoding="utf-8")
+
+
 def init(args: argparse.Namespace) -> int:
     root = args.root
     for p in [active_dir(root), archive_dir(root), harness_dir(root) / "tmp"]:
         p.mkdir(parents=True, exist_ok=True)
+    ensure_gitignore_entry(root, ".harness/")
     config = harness_dir(root) / "config.json"
     if not config.exists():
         write_json(config, {
@@ -872,7 +1003,7 @@ def check_spec(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
     risk = str(meta.get("risk") or state.get("risk") or "low")
     non_trivial = RISK_ORDER.get(risk, 1) >= 1
 
-    required = ["## Intent", "## Expected Outcome", "## Non-goals", "## Scope", "## Required evidence", "## Stop conditions", "## Open questions"]
+    required = ["## Intent", "## Expected Outcome", "## Non-goals", "## Scope", "## Required evidence", "## Stop conditions", "## Clarification record", "## Open questions"]
     for heading in required:
         section = get_section_lines(text, heading)
         if not section:
@@ -898,6 +1029,10 @@ def check_spec(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
     blocked_conditions = meaningful_bullets_after_subheading(text, "### Blocked")
     open_questions = meaningful_section_lines(text, "## Open questions")
     evidence_items = required_evidence_items(wu_path)
+
+    clarify_blocking, clarify_warnings = check_clarification_record(text, non_trivial)
+    blocking.extend(clarify_blocking)
+    warnings.extend(clarify_warnings)
 
     required_fields = [
         (intent, "Intent is empty."),

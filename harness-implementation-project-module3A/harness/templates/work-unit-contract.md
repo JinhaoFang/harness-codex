@@ -32,6 +32,7 @@ TBD: What problem are we solving? Include the user's intent, not an implementati
 ### Out of bounds
 
 - TBD
+- Harness runtime state (`.harness/config.json`, `.harness/current`, and `.harness/work-units/**`) is controller-managed. Do not treat it as product scope unless this Work Unit explicitly changes harness behavior.
 
 ## Required evidence
 
@@ -51,6 +52,15 @@ TBD: What problem are we solving? Include the user's intent, not an implementati
 - Ambiguous intent that changes product behavior.
 - Need to cross an out-of-bounds path.
 - Required evidence cannot be produced and no waiver is available.
+
+## Clarification record
+
+- user_confirmed: no
+- repo_grounded: no
+- user_intent_confidence: TBD
+- project_reality_confidence: TBD
+- key_decisions: TBD
+- remaining_assumptions: TBD
 
 ## Open questions
 
