@@ -90,7 +90,7 @@ python3 harness/cli/harnessctl.py evidence \
   --command "pytest tests/test_login.py"
 ```
 
-Freshness is checked against current HEAD and current diff hash. If the diff changes after evidence is recorded, re-run the relevant evidence or issue a waiver.
+Freshness is checked against current implementation content, current HEAD, and current diff hash. If implementation files change after evidence is recorded, re-run the relevant evidence or issue a waiver. If only harness lifecycle artifacts under `.harness/` change after evidence, the gate should warn rather than force all product evidence to be rerun.
 
 ## Artifact validation
 

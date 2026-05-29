@@ -13,7 +13,7 @@ Create the smallest contract that lets an agent, reviewer, and controller agree 
 - Contract does not own lifecycle status; `state.json` is the lifecycle authority. Do not add `status:` to the contract header.
 - Execution plans, feature lists, Codex Goals, briefings, and agent summaries do not override the contract.
 - The agent should read `contract.md` directly before implementation. Do not replace it with a compressed briefing.
-- Scope, success, risk, or required evidence changes require an explicit contract amendment before implementation continues.
+- Scope, success, risk, required evidence, or user-intent changes require an explicit contract amendment before implementation continues.
 - Keep contract content checkable; avoid vague evidence like "verify it works".
 - Do not proceed while open questions, placeholders, missing write boundary, missing required evidence, or missing stop conditions block the spec gate.
 
@@ -51,4 +51,4 @@ python3 harness/cli/harnessctl.py lock --id <WU-ID> --status ready
 python3 harness/cli/harnessctl.py amend --id <WU-ID> --field scope --reason "..." --summary "..."
 ```
 
-After amendment, request a new plan review before running because the plan must match the current contract.
+After amendment, request a new plan review unless the amendment is context-only and has no effect on the plan, implementation boundary, evidence plan, risk, success criteria, stop conditions, or user intent. For that narrow case, record it with `--field context --review-impact none`; do not use `--review-impact none` for scope, evidence, risk, success, intent, or stop-condition changes.

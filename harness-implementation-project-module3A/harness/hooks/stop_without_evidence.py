@@ -5,7 +5,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 
 def root() -> Path:
@@ -26,10 +26,22 @@ def current_work_unit_id(base: Path) -> Optional[str]:
     return wu_id or None
 
 
+def lifecycle_path(path: str) -> bool:
+    return path.startswith(".harness/")
+
+
 def has_changed_files(base: Path, wu_id: str) -> bool:
     try:
         status = subprocess.run(["git", "status", "--short"], cwd=base, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
-        if status.stdout.strip():
+        status_paths = []
+        for line in status.stdout.splitlines():
+            if not line.strip():
+                continue
+            path = line[3:].strip()
+            if " -> " in path:
+                path = path.split(" -> ", 1)[1]
+            status_paths.append(path)
+        if any(not lifecycle_path(path) for path in status_paths):
             return True
         state_path = base / ".harness" / "work-units" / "active" / wu_id / "state.json"
         base_commit = ""
@@ -40,16 +52,16 @@ def has_changed_files(base: Path, wu_id: str) -> bool:
                 base_commit = ""
         if base_commit:
             committed = subprocess.run(["git", "diff", "--name-only", f"{base_commit}..HEAD"], cwd=base, text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False)
-            return bool(committed.stdout.strip())
+            return any(not lifecycle_path(path.strip()) for path in committed.stdout.splitlines() if path.strip())
         return False
     except FileNotFoundError:
         return False
 
 
-def controller_gate(base: Path, wu_id: str, gate: str) -> tuple[bool, str]:
+def controller_gate(base: Path, wu_id: str, gate: str) -> tuple[bool, str, dict[str, Any]]:
     ctl = base / "harness" / "cli" / "harnessctl.py"
     if not ctl.exists():
-        return False, f"Missing harness controller CLI; cannot verify {gate} gate."
+        return False, f"Missing harness controller CLI; cannot verify {gate} gate.", {}
     proc = subprocess.run(
         [sys.executable, str(ctl), "--root", str(base), "check", "--id", wu_id, "--gate", gate, "--strict"],
         cwd=base,
@@ -65,11 +77,33 @@ def controller_gate(base: Path, wu_id: str, gate: str) -> tuple[bool, str]:
             # WARN can mean a scoped waiver is present; do not block stop, but surface it.
             if decision in {"PASS", "WARN"}:
                 reason = "; ".join(obj.get("warnings", [])) if decision == "WARN" else ""
-                return True, reason
+                return True, reason, obj
         except json.JSONDecodeError:
-            return False, f"Controller returned non-JSON {gate} output."
+            return False, f"Controller returned non-JSON {gate} output.", {}
     reason = proc.stdout.strip() or proc.stderr.strip() or f"{gate} gate blocked."
-    return False, reason
+    try:
+        obj = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        obj = {}
+    return False, reason, obj
+
+
+def summarize_controller_block(obj: dict[str, Any], fallback: str) -> str:
+    reasons = [str(x) for x in obj.get("blocking_reasons", []) if str(x).strip()]
+    if not reasons:
+        return fallback
+    if len(reasons) == 1:
+        return reasons[0]
+    return f"{reasons[0]} (+{len(reasons) - 1} more)"
+
+
+def stop_block(reason: str, gate: str, wu_id: str, next_action: str) -> None:
+    msg = (
+        f"Stop blocked for active Work Unit {wu_id}: {reason} "
+        f"Next action: {next_action} Then run "
+        f"`python3 harness/cli/harnessctl.py check --id {wu_id} --gate {gate} --strict`."
+    )
+    print(json.dumps({"decision": "block", "reason": msg}))
 
 
 def main() -> int:
@@ -79,27 +113,27 @@ def main() -> int:
         return 0
     if not has_changed_files(base, wu_id):
         return 0
-    verification_ok, verification_reason = controller_gate(base, wu_id, "verification")
+    verification_ok, verification_reason, verification_obj = controller_gate(base, wu_id, "verification")
     if not verification_ok:
-        msg = (
-            f"Active Work Unit {wu_id} has repository changes but the verification gate is not satisfied. "
-            "Do not summarize as complete. Record fresh claim-relative evidence or create a scoped waiver, then run "
-            f"`python3 harness/cli/harnessctl.py check --id {wu_id} --gate verification --strict`. "
-            + verification_reason
+        summary = summarize_controller_block(verification_obj, verification_reason)
+        stop_block(
+            f"verification gate is not satisfied because {summary}. Do not summarize as complete.",
+            "verification",
+            wu_id,
+            "record fresh claim-relative evidence for the changed implementation, or create a scoped human-approved waiver if the evidence cannot be produced.",
         )
-        print(json.dumps({"decision": "block", "reason": msg}))
         return 0
 
-    review_ok, review_reason = controller_gate(base, wu_id, "review")
+    review_ok, review_reason, review_obj = controller_gate(base, wu_id, "review")
     if review_ok:
         return 0
-    msg = (
-        f"Active Work Unit {wu_id} has verified repository changes but the close review gate is not satisfied. "
-        "Do not stop after implementation evidence alone. Request or submit the required close review, then run "
-        f"`python3 harness/cli/harnessctl.py check --id {wu_id} --gate review --strict`. "
-        + review_reason
+    summary = summarize_controller_block(review_obj, review_reason)
+    stop_block(
+        f"verification is satisfied, but close review gate is not satisfied because {summary}. Do not stop after implementation evidence alone.",
+        "review",
+        wu_id,
+        "request close review, start the reviewer subagent with contract/diff/evidence inputs, and wait for the reviewer verdict.",
     )
-    print(json.dumps({"decision": "block", "reason": msg}))
     return 0
 
 

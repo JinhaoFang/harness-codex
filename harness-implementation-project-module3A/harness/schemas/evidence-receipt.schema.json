@@ -88,6 +88,9 @@
     "diff_hash": {
       "type": "string"
     },
+    "implementation_diff_hash": {
+      "type": "string"
+    },
     "changed_files": {
       "type": "array",
       "items": {

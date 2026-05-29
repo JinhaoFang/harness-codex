@@ -42,7 +42,13 @@ wu/<WU-ID>-short-topic
 issue-<number>-short-topic
 ```
 
-Create the branch only after the Work Unit is specified enough to enter implementation.
+Create GitHub-facing artifacts only after the local task shape is grounded:
+
+- create or update the Work Unit first;
+- lock the contract and pass the required plan review for medium+ work;
+- then create the issue/branch/PR surface that mirrors that reviewed plan.
+
+Do not open GitHub issue or branch state as a substitute for clarification, spec, or plan review. For trivial or low-risk local work, GitHub remains optional.
 
 ## Issue body
 

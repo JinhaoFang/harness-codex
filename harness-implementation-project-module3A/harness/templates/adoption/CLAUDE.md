@@ -90,7 +90,9 @@ python3 harness/cli/harnessctl.py check --id <WU-ID> --gate verification --stric
 ```
 ## 9. 开发与执行
 
-当 work unit 通过 review 后可以使用 worker 来进行任务的执行
+当 work unit 通过方案审查后可以使用 worker 来进行任务的执行。
+
+GitHub issue、分支和 PR 应在工作单元已规范化、契约已锁定且所需方案审查通过后创建。GitHub 是协作表面，不替代澄清、契约、证据或审查门禁。
 
 ## 10. 审查与验收 (Review And Acceptance)
 
@@ -98,6 +100,7 @@ python3 harness/cli/harnessctl.py check --id <WU-ID> --gate verification --stric
 - **结项审查（Close Review）**：在验收前检查 Diff、证据、范围、风险和可维护性。
 - 中等及以上风险的工作在“运行”前需要方案审查通过，在“完成”前需要结项审查通过。
 - 结项审查必须引用最新的证据回执 ID。
+- 合约 amendment 后，只有当变更影响实施方案、写入边界、证据计划、风险、成功标准或用户意图时才需要重新方案审查；生命周期记录或无实现影响的小修正不应强制重新审查。
 - 高危/关键工作需要独立审查或人工关卡。
 
 ## 11. 安全与边界 (Safety And Boundaries)

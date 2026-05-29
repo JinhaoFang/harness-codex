@@ -184,6 +184,8 @@ class HarnessCtlTests(unittest.TestCase):
             out = json.loads(proc.stdout)
             self.assertEqual(out["decision"], "block")
             self.assertIn("verification gate", out["reason"])
+            self.assertIn("Next action:", out["reason"])
+            self.assertIn("record fresh claim-relative evidence", out["reason"])
             self.assertNotIn("hookSpecificOutput", out)
 
             run(root, "new", "--id", "WU-STOP-REVIEW", "--title", "Stop Review", "--type", "bugfix", "--risk", "medium")
@@ -195,6 +197,7 @@ class HarnessCtlTests(unittest.TestCase):
             out = json.loads(proc.stdout)
             self.assertEqual(out["decision"], "block")
             self.assertIn("close review gate", out["reason"])
+            self.assertIn("start the reviewer subagent", out["reason"])
 
             with self.assertRaises(harnessctl.HarnessError) as ctx:
                 harnessctl.submit_review(argparse.Namespace(
@@ -294,6 +297,46 @@ class HarnessCtlTests(unittest.TestCase):
             run(root, "submit-review", "--id", "WU-REVIEW", "--mode", "close", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context", "--evidence-ref", receipt_id)
             proc = run(root, "check", "--id", "WU-REVIEW", "--gate", "review", "--strict")
             self.assertIn('"decision": "PASS"', proc.stdout)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_lifecycle_only_commit_does_not_stale_verified_work(self):
+        root = make_repo()
+        try:
+            run(root, "init")
+            run(root, "new", "--id", "WU-LIFECYCLE", "--title", "Lifecycle", "--type", "bugfix", "--risk", "medium")
+            fill_contract(root, "WU-LIFECYCLE")
+            run(root, "lock", "--id", "WU-LIFECYCLE", "--status", "ready")
+            run(root, "submit-review", "--id", "WU-LIFECYCLE", "--mode", "plan", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context")
+
+            (root / "src").mkdir()
+            (root / "src" / "app.py").write_text("value = 1\n", encoding="utf-8")
+            receipt_proc = run(root, "evidence", "--id", "WU-LIFECYCLE", "--claim", "EV1", "--type", "test", "--result", "pass", "--command", "true", "--command-log-ref", ".harness/work-units/active/WU-LIFECYCLE/evidence/artifacts/test.log")
+            receipt_id = json.loads(receipt_proc.stdout)["receipt_id"]
+            run(root, "submit-review", "--id", "WU-LIFECYCLE", "--mode", "close", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context", "--evidence-ref", receipt_id)
+
+            subprocess.run(["git", "add", "src/app.py"], cwd=root, check=True, timeout=10)
+            subprocess.run(["git", "commit", "-m", "feat: implement work unit"], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=10)
+            proc = run(root, "check", "--id", "WU-LIFECYCLE", "--gate", "verification", "--strict")
+            self.assertIn('"decision": "WARN"', proc.stdout)
+            self.assertIn("implementation diff is unchanged", proc.stdout)
+            proc = run(root, "check", "--id", "WU-LIFECYCLE", "--gate", "review", "--strict")
+            self.assertIn('"decision": "WARN"', proc.stdout)
+            self.assertIn("implementation diff is unchanged", proc.stdout)
+
+            run(root, "handoff", "--id", "WU-LIFECYCLE", "--next-safe-action", "Archive after merge.")
+            subprocess.run(["git", "add", "-f", ".harness/work-units/active/WU-LIFECYCLE"], cwd=root, check=True, timeout=10)
+            subprocess.run(["git", "commit", "-m", "chore: record work unit handoff"], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=10)
+
+            proc = run(root, "check", "--id", "WU-LIFECYCLE", "--gate", "verification", "--strict")
+            self.assertIn('"decision": "WARN"', proc.stdout)
+            self.assertIn("lifecycle-only artifacts changed", proc.stdout)
+            proc = run(root, "check", "--id", "WU-LIFECYCLE", "--gate", "review", "--strict")
+            self.assertIn('"decision": "WARN"', proc.stdout)
+
+            hook = root / "harness" / "hooks" / "stop_without_evidence.py"
+            proc = subprocess.run([sys.executable, str(hook)], cwd=root, text=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            self.assertEqual(proc.stdout, "")
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
@@ -539,6 +582,32 @@ class HarnessCtlTests(unittest.TestCase):
             run(root, "submit-review", "--id", "WU-AMEND", "--mode", "plan", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context")
             proc = run(root, "set-state", "--id", "WU-AMEND", "--status", "running")
             self.assertIn('"status": "running"', proc.stdout)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_no_impact_amendment_does_not_force_plan_rereview(self):
+        root = make_repo()
+        try:
+            run(root, "init")
+            run(root, "new", "--id", "WU-AMEND-NO-IMPACT", "--title", "Amend No Impact", "--type", "bugfix", "--risk", "medium")
+            fill_contract(root, "WU-AMEND-NO-IMPACT")
+            run(root, "lock", "--id", "WU-AMEND-NO-IMPACT", "--status", "ready")
+            run(root, "submit-review", "--id", "WU-AMEND-NO-IMPACT", "--mode", "plan", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context")
+
+            contract = root / ".harness" / "work-units" / "active" / "WU-AMEND-NO-IMPACT" / "contract.md"
+            contract.write_text(contract.read_text(encoding="utf-8").replace("contract.md\n- src/**", "contract.md\n- README.md\n- src/**"), encoding="utf-8")
+            run(root, "amend", "--id", "WU-AMEND-NO-IMPACT", "--field", "context", "--reason", "Added context pointer", "--summary", "Added README context pointer; no plan, scope, evidence, risk, success, or intent change", "--actor", "human", "--review-impact", "none")
+            run(root, "lock", "--id", "WU-AMEND-NO-IMPACT", "--status", "ready")
+            proc = run(root, "check", "--id", "WU-AMEND-NO-IMPACT", "--gate", "plan-review", "--strict")
+            self.assertIn('"decision": "WARN"', proc.stdout)
+            self.assertIn("declares no plan/review impact", proc.stdout)
+            proc = run(root, "set-state", "--id", "WU-AMEND-NO-IMPACT", "--status", "running")
+            self.assertIn('"status": "running"', proc.stdout)
+
+            contract.write_text(contract.read_text(encoding="utf-8").replace("Observable behavior is corrected.", "Observable behavior and regression coverage are corrected."), encoding="utf-8")
+            proc = run(root, "amend", "--id", "WU-AMEND-NO-IMPACT", "--field", "success", "--reason", "Changed success criteria", "--summary", "Success criteria now includes regression coverage", "--actor", "human", "--review-impact", "none", check=False)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("only allowed for context-only amendments", proc.stderr)
         finally:
             shutil.rmtree(root, ignore_errors=True)
 

@@ -29,6 +29,7 @@ WAIVER_SCHEMA = "harness.waiver.v1"
 VALID_STATUSES = ["draft", "specified", "ready", "running", "verifying", "reviewing", "integrating", "handoff", "archived", "blocked"]
 RISK_ORDER = {"trivial": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 PASS_DECISIONS = {"PASS", "PASS_WITH_RISK_ACCEPTED"}
+LIFECYCLE_PATH_PREFIXES = (".harness/",)
 
 
 class HarnessError(Exception):
@@ -94,7 +95,11 @@ def work_unit_changed_files(root: Path, base_commit: str = "") -> List[str]:
     return sorted(files)
 
 
-def diff_hash(root: Path, base_commit: str = "") -> str:
+def lifecycle_path(path: str) -> bool:
+    return any(path.startswith(prefix) for prefix in LIFECYCLE_PATH_PREFIXES)
+
+
+def diff_hash(root: Path, base_commit: str = "", include_lifecycle: bool = True) -> str:
     if run_git(root, ["rev-parse", "--is-inside-work-tree"], "false") != "true":
         return "no-git"
     h = hashlib.sha256()
@@ -105,9 +110,47 @@ def diff_hash(root: Path, base_commit: str = "") -> str:
     queries.extend((["diff", "--no-ext-diff", "--name-status"], ["diff", "--cached", "--no-ext-diff", "--name-status"], ["status", "--short"]))
     for args in queries:
         out = run_git(root, args, "")
+        if not include_lifecycle:
+            out = "\n".join(line for line in out.splitlines() if not line_touches_lifecycle_path(line))
         h.update("\0".join(args).encode("utf-8"))
         h.update(out.encode("utf-8"))
     return h.hexdigest()
+
+
+def line_touches_lifecycle_path(line: str) -> bool:
+    parts = line.split()
+    paths = parts[1:] if len(parts) > 1 else parts
+    if "->" in line:
+        paths = [p.strip() for p in line.split("->")]
+    return bool(paths) and all(lifecycle_path(p.strip()) for p in paths)
+
+
+def implementation_diff_hash(root: Path, base_commit: str = "") -> str:
+    h = hashlib.sha256()
+    h.update((base_commit or "").encode("utf-8"))
+    for rel in implementation_changed_files(root, base_commit):
+        h.update(rel.encode("utf-8"))
+        path = root / rel
+        if path.is_file():
+            h.update(path.read_bytes())
+        else:
+            h.update(b"<missing>")
+    return h.hexdigest()
+
+
+def implementation_changed_files(root: Path, base_commit: str = "") -> List[str]:
+    expanded: set[str] = set()
+    for rel in work_unit_changed_files(root, base_commit):
+        if lifecycle_path(rel):
+            continue
+        path = root / rel
+        if path.is_dir():
+            for child in path.rglob("*"):
+                if child.is_file() and ".git" not in child.parts:
+                    expanded.add(child.relative_to(root).as_posix())
+            continue
+        expanded.add(rel.rstrip("/"))
+    return sorted(expanded)
 
 
 def harness_dir(root: Path) -> Path:
@@ -234,6 +277,7 @@ def update_state(root: Path, wu_path: Path, **patch: Any) -> Dict[str, Any]:
     state["head_commit"] = head_commit(root)
     base_commit = str(state.get("base_commit", ""))
     state["diff_hash"] = diff_hash(root, base_commit)
+    state["implementation_diff_hash"] = implementation_diff_hash(root, base_commit)
     state["changed_files"] = work_unit_changed_files(root, base_commit)
     state["updated_at"] = now_iso()
     write_json(state_path(wu_path), state)
@@ -663,6 +707,7 @@ def new(args: argparse.Namespace) -> int:
         "started_at_head": head_commit(root),
         "head_commit": head_commit(root),
         "diff_hash": diff_hash(root, head_commit(root)),
+        "implementation_diff_hash": implementation_diff_hash(root, head_commit(root)),
         "contract_locked": False,
         "contract_lock_hash": "",
         "locked_at": "",
@@ -760,7 +805,11 @@ def plan_review_passes(root: Path, wu_path: Path) -> Tuple[bool, List[str], List
     reviewed_hash = str(latest.get("reviewed_contract_hash", ""))
     current_hash = contract_hash(wu_path)
     if reviewed_hash and reviewed_hash != current_hash:
-        blocking.append("Latest passing plan review was for an older contract; re-run plan review after amendment.")
+        amendments = [a for a in read_jsonl(amendments_path(wu_path)) if a.get("contract_hash") == current_hash]
+        if amendments and str(amendments[-1].get("review_impact", "")) == "none":
+            warnings.append("Latest passing plan review was for an older contract, but latest amendment declares no plan/review impact.")
+        else:
+            blocking.append("Latest passing plan review was for an older contract; re-run plan review after amendment.")
     if RISK_ORDER.get(risk, 1) >= 3 and not (latest.get("is_independent") or latest.get("independence_level") == "human_gate"):
         blocking.append(f"{risk} risk requires independent plan review or human gate before running.")
     elif latest.get("independence_level") == "self_check":
@@ -822,6 +871,8 @@ def lock(args: argparse.Namespace) -> int:
 def amend(args: argparse.Namespace) -> int:
     root = args.root
     work_unit_id, wu_path = resolve_wu(root, args.id)
+    if args.review_impact == "none" and args.field != "context":
+        raise HarnessError("--review-impact none is only allowed for context-only amendments. Intent, scope, evidence, risk, success, and stop-condition changes require plan review.")
     decision, blocking, warnings = check_spec(root, wu_path)
     if decision == "BLOCK" and not args.allow_draft:
         raise HarnessError("Cannot record a locked amendment while spec gate blocks: " + "; ".join(blocking))
@@ -833,6 +884,7 @@ def amend(args: argparse.Namespace) -> int:
         "reason": args.reason,
         "summary": args.summary,
         "actor": args.actor,
+        "review_impact": args.review_impact,
         "contract_hash": contract_hash(wu_path),
         "created_at": now_iso(),
     }
@@ -840,7 +892,8 @@ def amend(args: argparse.Namespace) -> int:
     if decision == "BLOCK" and args.allow_draft:
         state = update_state(root, wu_path, status="draft", contract_locked=False, contract_lock_hash="", last_amendment_at=amendment["created_at"], next_safe_action="Finish contract amendment and run spec gate before locking.")
     else:
-        state = update_state(root, wu_path, status="specified", contract_locked=True, contract_lock_hash=contract_hash(wu_path), last_amendment_at=amendment["created_at"], next_safe_action="Re-request plan review before running because contract changed.")
+        next_action = "Lock and continue; latest amendment declares no plan/review impact." if args.review_impact == "none" else "Re-request plan review before running because contract changed."
+        state = update_state(root, wu_path, status="specified", contract_locked=True, contract_lock_hash=contract_hash(wu_path), last_amendment_at=amendment["created_at"], next_safe_action=next_action)
     print(json.dumps({
         "schema_version": "harness.amendment_recorded.v1",
         "work_unit_id": work_unit_id,
@@ -887,6 +940,7 @@ def evidence(args: argparse.Namespace) -> int:
         "base_commit": base_commit,
         "head_commit": head_commit(root),
         "diff_hash": diff_hash(root, base_commit),
+        "implementation_diff_hash": implementation_diff_hash(root, base_commit),
         "last_relevant_change_at": args.last_relevant_change_at or ts,
         "changed_files": work_unit_changed_files(root, base_commit),
         "covers": args.covers or [],
@@ -1103,6 +1157,7 @@ def check_verification(root: Path, wu_path: Path) -> Tuple[str, List[str], List[
     risk = str(state.get("risk") or contract_meta(wu_path).get("risk", "low"))
     base_commit = str(state.get("base_commit", ""))
     cur_diff = diff_hash(root, base_commit)
+    cur_impl_diff = implementation_diff_hash(root, base_commit)
     scoped_waivers = waivers_by_requirement(wu_path, work_unit_id)
 
     for item in required:
@@ -1129,10 +1184,18 @@ def check_verification(root: Path, wu_path: Path) -> Tuple[str, List[str], List[
 
         if receipt.get("result") == "skipped":
             blocking.append(f"Required evidence {ev_id} is skipped; skipped receipts cannot satisfy verification.")
+        receipt_impl_diff = str(receipt.get("implementation_diff_hash") or "")
+        lifecycle_only_drift = receipt.get("diff_hash") != cur_diff and receipt_impl_diff and receipt_impl_diff == cur_impl_diff
         if receipt.get("head_commit") != cur_head:
-            warnings.append(f"Evidence {ev_id} was recorded on a different HEAD. Confirm documented equivalence or rerun.")
+            if lifecycle_only_drift:
+                warnings.append(f"Evidence {ev_id} was recorded on an older HEAD, but implementation diff is unchanged; lifecycle-only artifacts changed after evidence.")
+            else:
+                warnings.append(f"Evidence {ev_id} was recorded on a different HEAD. Confirm documented equivalence or rerun.")
         if receipt.get("diff_hash") != cur_diff:
-            blocking.append(f"Evidence {ev_id} is stale: current diff hash differs from receipt diff_hash.")
+            if lifecycle_only_drift:
+                warnings.append(f"Evidence {ev_id} diff_hash changed only because lifecycle artifacts changed after evidence.")
+            else:
+                blocking.append(f"Evidence {ev_id} is stale: current diff hash differs from receipt diff_hash.")
         if not receipt_has_reviewable_support(receipt):
             blocking.append(f"Evidence {ev_id} lacks command, command log, artifact, or manual artifact reference.")
         if RISK_ORDER.get(risk, 1) >= 2 and not (receipt.get("artifact_uri") or receipt.get("command_log_ref") or receipt.get("manual_artifact_ref")):
@@ -1185,6 +1248,7 @@ def check_review(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
     base_commit = str(state.get("base_commit", ""))
     cur_head = head_commit(root)
     cur_diff = diff_hash(root, base_commit)
+    cur_impl_diff = implementation_diff_hash(root, base_commit)
     for v in verdicts:
         refs = set(str(x).strip() for x in v.get("evidence_refs", []) if str(x).strip())
         if RISK_ORDER.get(risk, 1) >= 2 and not refs:
@@ -1195,8 +1259,13 @@ def check_review(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
             if receipt is None:
                 continue
             rid = str(receipt.get("receipt_id", ""))
+            receipt_impl_diff = str(receipt.get("implementation_diff_hash") or "")
+            lifecycle_only_drift = receipt.get("diff_hash") != cur_diff and receipt_impl_diff and receipt_impl_diff == cur_impl_diff
             if receipt.get("head_commit") != cur_head or receipt.get("diff_hash") != cur_diff:
-                blocking.append(f"Close review cites stale evidence context for {ev_id}; rerun verification before passing review.")
+                if lifecycle_only_drift:
+                    warnings.append(f"Close review cites evidence {ev_id} from an older HEAD, but implementation diff is unchanged; lifecycle-only artifacts changed after review.")
+                else:
+                    blocking.append(f"Close review cites stale evidence context for {ev_id}; rerun verification before passing review.")
             if refs and rid not in refs:
                 msg = f"Passing close review does not cite latest fresh receipt {rid} for required claim {ev_id}."
                 if RISK_ORDER.get(risk, 1) >= 2:
@@ -1517,8 +1586,7 @@ def validate(args: argparse.Namespace) -> int:
 def has_non_harness_work_changes(root: Path, wu_path: Path) -> bool:
     state = load_json(state_path(wu_path), {})
     base_commit = str(state.get("base_commit", ""))
-    files = work_unit_changed_files(root, base_commit)
-    return any(not f.startswith(".harness/") for f in files)
+    return bool(implementation_changed_files(root, base_commit))
 
 
 def ci(args: argparse.Namespace) -> int:
@@ -1807,6 +1875,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--reason", required=True)
     p.add_argument("--summary", required=True)
     p.add_argument("--actor", default="human")
+    p.add_argument("--review-impact", default="plan", choices=["plan", "none"], help="Use none only with --field context when the amendment does not affect plan, scope, evidence, risk, success, or user intent.")
     p.add_argument("--allow-draft", action="store_true", help="Record amendment even when spec gate blocks; leaves Work Unit unlocked in draft.")
     p.set_defaults(func=amend)
 

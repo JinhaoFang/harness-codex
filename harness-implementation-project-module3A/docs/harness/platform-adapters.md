@@ -145,6 +145,8 @@ Use hooks for deterministic checks and lifecycle reminders. Use subagents or pro
 
 GitHub is collaboration and review surface, not completion authority. Use it by task type and risk:
 
+Create GitHub issues, branches, commits, and PRs after the Work Unit is specified and the relevant plan review has passed. Do not use GitHub state as a replacement for clarification, spec, evidence, or review gates.
+
 | Task class | Git repo artifacts | GitHub issue | PR / CI |
 |---|---|---|---|
 | trivial docs/comment | usually none beyond final note | no | optional |
