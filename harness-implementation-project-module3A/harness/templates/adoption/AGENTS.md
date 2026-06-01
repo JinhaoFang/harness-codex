@@ -67,7 +67,7 @@
 
 ## 7. 子智能体路由 (Subagent Routing)
 
-只有当平台实际启动子智能体时，隔离性才会提升。不要假设写下的路由规则会自动执行。启用子智能体时，等待时长默认 30 mins
+只有当平台实际启动子智能体时，隔离性才会提升。不要假设写下的路由规则会自动执行。启用子智能体时，等待时长默认 30 mins，当 work unit 通过方案审查后可以使用 **harness_worker** 来进行任务代码的开发与执行！
 
 - 在进行**中等及以上风险**的实施前，运行 `harnessctl request-review --mode plan`，启动 Reviewer 子智能体，等待结论，然后运行 `harnessctl check --gate plan-review --strict`。
 - 方案审查通过后，在写入边界清晰的情况下，启动 Worker 子智能体进行实施。仅在极小、低风险的编辑时才保留在主智能体中实施，并记录无需执行者隔离的原因。
@@ -90,7 +90,6 @@ python3 harness/cli/harnessctl.py check --id <WU-ID> --gate verification --stric
 ```
 ## 9. 开发与执行
 
-当 work unit 通过方案审查后可以使用 worker 来进行任务的执行。
 
 GitHub issue、分支和 PR 应在工作单元已规范化、契约已锁定且所需方案审查通过后创建。GitHub 是协作表面，不替代澄清、契约、证据或审查门禁。
 

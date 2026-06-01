@@ -1,6 +1,6 @@
 ---
 name: harness-review
-description: Perform plan, close, risk, security, or architecture review from fresh inputs. Use before implementation for plan sufficiency, before completion for close review, when evidence is skipped, when scope drift is suspected, or when high/critical risk requires independent review or human gate.
+description: Perform plan, close, close-addendum, publication, risk, security, or architecture review from fresh inputs. Use before implementation for plan sufficiency, before completion for close review, when evidence is skipped, when scope drift is suspected, or when high/critical risk requires independent review or human gate.
 ---
 
 # Harness Review
@@ -49,6 +49,12 @@ Before acceptance, check:
 - Findings are concrete and actionable.
 - Passing close review cites the fresh evidence receipt IDs that support every required evidence claim for medium or higher risk.
 
+## Close-addendum and publication review
+
+Use close-addendum when a prior close review remains valid for the implementation, but a lightweight amendment adds or changes required evidence, acceptance wording, or publication/collaboration evidence. Use publication review for GitHub issue/PR/branch publication checks. Do not use either mode to hide implementation, scope, risk, or behavior changes that require full close review.
+
+Close-addendum should read the previous close review, latest amendment, current contract, current evidence receipts, and implementation diff hash. Publication review should read the GitHub artifact, linked Work Unit, publication evidence receipt, and PR/issue body.
+
 ## Commands
 
 Plan review:
@@ -68,3 +74,19 @@ python3 harness/cli/harnessctl.py check --id <WU-ID> --gate review --strict
 ```
 
 The builder must not write the close review verdict for its own work. A PASS without `--evidence-ref <EV-RECEIPT-ID>` is not acceptable for medium or higher risk close review.
+
+
+Close-addendum review:
+
+```bash
+python3 harness/cli/harnessctl.py request-review --id <WU-ID> --mode close-addendum --reviewer-role reviewer-agent
+python3 harness/cli/harnessctl.py submit-review --id <WU-ID> --mode close-addendum --decision PASS --reviewer-role reviewer-agent --independence-level fresh_context --evidence-ref <NEW-EV-RECEIPT-ID>
+python3 harness/cli/harnessctl.py check --id <WU-ID> --gate review --strict
+```
+
+Publication review:
+
+```bash
+python3 harness/cli/harnessctl.py request-review --id <WU-ID> --mode publication --reviewer-role reviewer-agent
+python3 harness/cli/harnessctl.py submit-review --id <WU-ID> --mode publication --decision PASS --reviewer-role reviewer-agent --independence-level fresh_context --evidence-ref <PUBLICATION-EV-RECEIPT-ID>
+```

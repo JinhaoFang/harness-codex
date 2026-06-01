@@ -641,6 +641,56 @@ class HarnessCtlTests(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
+    def test_collaboration_amendment_uses_publication_review_without_full_plan_rerun(self):
+        root = make_repo()
+        try:
+            run(root, "init")
+            run(root, "new", "--id", "WU-PUB", "--title", "Publication", "--type", "bugfix", "--risk", "medium")
+            fill_contract(root, "WU-PUB")
+            run(root, "lock", "--id", "WU-PUB", "--status", "ready")
+            run(root, "submit-review", "--id", "WU-PUB", "--mode", "plan", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context")
+
+            (root / "src").mkdir(exist_ok=True)
+            (root / "src" / "feature.py").write_text("value = 1\n", encoding="utf-8")
+            ev1 = json.loads(run(root, "evidence", "--id", "WU-PUB", "--claim", "EV1", "--type", "test", "--result", "pass", "--command", "true", "--command-log-ref", ".harness/work-units/active/WU-PUB/evidence/artifacts/ev1.log").stdout)["receipt_id"]
+            run(root, "submit-review", "--id", "WU-PUB", "--mode", "close", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context", "--evidence-ref", ev1)
+
+            set_required_evidence(root, "WU-PUB", ["EV1", "EV7"])
+            run(root, "amend", "--id", "WU-PUB", "--field", "required_evidence", "--impact", "collaboration_only", "--reason", "Add GitHub collaboration", "--summary", "Add GitHub issue evidence without implementation changes", "--actor", "human")
+            run(root, "lock", "--id", "WU-PUB", "--status", "ready")
+            proc = run(root, "check", "--id", "WU-PUB", "--gate", "plan-review", "--strict")
+            self.assertIn('"decision": "WARN"', proc.stdout)
+            self.assertIn("plan re-review is not required", proc.stdout)
+
+            proc = run(root, "check", "--id", "WU-PUB", "--gate", "review", "--strict", check=False)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("EV7", proc.stdout)
+
+            ev7 = json.loads(run(root, "evidence", "--id", "WU-PUB", "--claim", "EV7", "--type", "manual", "--result", "pass", "--command", "gh issue view 7 --json number,title,state,url,body", "--artifact-uri", "https://github.com/example/repo/issues/7").stdout)["receipt_id"]
+            run(root, "submit-review", "--id", "WU-PUB", "--mode", "publication", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context", "--evidence-ref", ev7)
+            proc = run(root, "check", "--id", "WU-PUB", "--gate", "review", "--strict")
+            self.assertIn('"decision": "WARN"', proc.stdout)
+            self.assertIn("supplemental review covers", proc.stdout)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_verification_gate_outputs_per_claim_minimal_plan(self):
+        root = make_repo()
+        try:
+            run(root, "init")
+            run(root, "new", "--id", "WU-EV-PLAN", "--title", "Evidence Plan", "--type", "bugfix", "--risk", "low")
+            set_required_evidence(root, "WU-EV-PLAN", ["EV1", "EV2"])
+            run(root, "evidence", "--id", "WU-EV-PLAN", "--claim", "EV1", "--type", "test", "--result", "pass", "--command", "true")
+            out = json.loads(run(root, "check", "--id", "WU-EV-PLAN", "--gate", "verification", "--strict", check=False).stdout)
+            self.assertEqual(out["decision"], "BLOCK")
+            statuses = {x["claim"]: x for x in out["evidence_status"]}
+            self.assertEqual(statuses["EV1"]["status"], "satisfied")
+            self.assertEqual(statuses["EV2"]["status"], "missing")
+            self.assertTrue(statuses["EV2"]["requires_rerun"])
+            self.assertIn("EV2", statuses["EV2"]["minimal_next_action"])
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
     def test_platform_adapter_layouts(self):
         codex_config = tomllib.loads((PROJECT_ROOT / ".codex" / "config.toml").read_text(encoding="utf-8"))
         self.assertNotIn("agent", codex_config)

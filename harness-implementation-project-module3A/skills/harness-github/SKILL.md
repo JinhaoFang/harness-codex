@@ -50,6 +50,16 @@ Create GitHub-facing artifacts only after the local task shape is grounded:
 
 Do not open GitHub issue or branch state as a substitute for clarification, spec, or plan review. For trivial or low-risk local work, GitHub remains optional.
 
+If GitHub collaboration is added after implementation has already passed local review, classify the amendment precisely instead of reopening the whole implementation loop:
+
+```bash
+python3 harness/cli/harnessctl.py amend --id <WU-ID> --field required_evidence --impact collaboration_only --reason "Add GitHub collaboration evidence" --summary "Add issue/PR publication evidence; implementation scope unchanged"
+python3 harness/cli/harnessctl.py evidence --id <WU-ID> --claim <EV-GITHUB> --type manual --result pass --command "gh issue view <N> --json number,title,state,url,body" --artifact-uri <ISSUE-OR-PR-URL>
+python3 harness/cli/harnessctl.py request-review --id <WU-ID> --mode publication --reviewer-role reviewer-agent
+```
+
+Do not rerun implementation evidence or full close review unless code, scope, risk, or behavior changed.
+
 ## Issue body
 
 The issue body should contain or link the Work Unit Contract. Keep it stable and reviewable; do not turn comments into a second task ledger.

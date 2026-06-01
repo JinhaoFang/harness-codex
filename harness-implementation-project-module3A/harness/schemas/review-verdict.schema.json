@@ -27,6 +27,8 @@
       "enum": [
         "plan",
         "close",
+        "close-addendum",
+        "publication",
         "risk",
         "security",
         "architecture",

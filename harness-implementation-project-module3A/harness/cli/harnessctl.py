@@ -7,12 +7,15 @@ quality and it does not replace human/product review.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
+import fcntl
 import fnmatch
 import hashlib
 import json
 import os
 import re
+import time
 from pathlib import Path
 import shutil
 import subprocess
@@ -30,6 +33,15 @@ VALID_STATUSES = ["draft", "specified", "ready", "running", "verifying", "review
 RISK_ORDER = {"trivial": 0, "low": 1, "medium": 2, "high": 3, "critical": 4}
 PASS_DECISIONS = {"PASS", "PASS_WITH_RISK_ACCEPTED"}
 LIFECYCLE_PATH_PREFIXES = (".harness/",)
+REVIEW_MODES = ["plan", "close", "close-addendum", "publication", "risk", "security", "architecture", "evaluator"]
+AMENDMENT_IMPACTS = {
+    "context_only": {"plan_review_required": False, "affects_implementation": False, "affects_acceptance": False, "recommended_review": "none"},
+    "collaboration_only": {"plan_review_required": False, "affects_implementation": False, "affects_acceptance": True, "recommended_review": "publication"},
+    "evidence_only": {"plan_review_required": False, "affects_implementation": False, "affects_acceptance": True, "recommended_review": "close-addendum"},
+    "success_criteria": {"plan_review_required": True, "affects_implementation": False, "affects_acceptance": True, "recommended_review": "close-addendum_or_close"},
+    "scope_or_risk": {"plan_review_required": True, "affects_implementation": True, "affects_acceptance": True, "recommended_review": "close"},
+    "implementation": {"plan_review_required": True, "affects_implementation": True, "affects_acceptance": True, "recommended_review": "close"},
+}
 
 
 class HarnessError(Exception):
@@ -193,26 +205,76 @@ def resolve_wu(root: Path, work_unit_id: Optional[str]) -> Tuple[str, Path]:
     return work_unit_id, path
 
 
+@contextlib.contextmanager
+def exclusive_file_lock(lock_path: Path):
+    """Process-level advisory lock for controller-owned files.
+
+    This prevents read-modify-write lifecycle operations from racing when an
+    agent, hook, or human runs multiple harnessctl commands at the same time.
+    It is intentionally local and small; it is not a distributed lock.
+    """
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    deadline = time.time() + 5.0
+    with lock_path.open("a+", encoding="utf-8") as lock_fh:
+        while True:
+            try:
+                fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.time() >= deadline:
+                    raise HarnessError(f"Timed out waiting for controller lock: {lock_path}")
+                time.sleep(0.02)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
+
+
+def atomic_write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    with tmp.open("w", encoding="utf-8") as fh:
+        fh.write(text)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+    try:
+        dir_fd = os.open(str(path.parent), os.O_RDONLY)
+        try:
+            os.fsync(dir_fd)
+        finally:
+            os.close(dir_fd)
+    except OSError:
+        pass
+
+
 def load_json(path: Path, default: Any = None) -> Any:
     if not path.exists():
         if default is not None:
             return default
         raise HarnessError(f"Missing JSON file: {path}")
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise HarnessError(f"Invalid JSON in {path}: {exc}") from exc
+    last_exc: Optional[json.JSONDecodeError] = None
+    for _ in range(3):
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            last_exc = exc
+            time.sleep(0.02)
+    raise HarnessError(f"Invalid JSON in {path}: {last_exc}")
 
 
 def write_json(path: Path, obj: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(obj, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    atomic_write_text(path, json.dumps(obj, ensure_ascii=False, indent=2) + "\n")
 
 
 def append_jsonl(path: Path, obj: Dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(obj, ensure_ascii=False, sort_keys=True) + "\n")
+    line = json.dumps(obj, ensure_ascii=False, sort_keys=True) + "\n"
+    with exclusive_file_lock(path.with_suffix(path.suffix + ".lock")):
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(line)
+            fh.flush()
+            os.fsync(fh.fileno())
 
 
 def read_jsonl(path: Path) -> List[Dict[str, Any]]:
@@ -271,17 +333,19 @@ def lock_mismatch(state: Dict[str, Any], wu_path: Path) -> str:
 
 
 def update_state(root: Path, wu_path: Path, **patch: Any) -> Dict[str, Any]:
-    state = load_json(state_path(wu_path))
-    state.update({k: v for k, v in patch.items() if v is not None})
-    state["branch"] = current_branch(root)
-    state["head_commit"] = head_commit(root)
-    base_commit = str(state.get("base_commit", ""))
-    state["diff_hash"] = diff_hash(root, base_commit)
-    state["implementation_diff_hash"] = implementation_diff_hash(root, base_commit)
-    state["changed_files"] = work_unit_changed_files(root, base_commit)
-    state["updated_at"] = now_iso()
-    write_json(state_path(wu_path), state)
-    return state
+    spath = state_path(wu_path)
+    with exclusive_file_lock(wu_path / ".state.lock"):
+        state = load_json(spath)
+        state.update({k: v for k, v in patch.items() if v is not None})
+        state["branch"] = current_branch(root)
+        state["head_commit"] = head_commit(root)
+        base_commit = str(state.get("base_commit", ""))
+        state["diff_hash"] = diff_hash(root, base_commit)
+        state["implementation_diff_hash"] = implementation_diff_hash(root, base_commit)
+        state["changed_files"] = work_unit_changed_files(root, base_commit)
+        state["updated_at"] = now_iso()
+        write_json(spath, state)
+        return state
 
 
 def clean_scalar(value: str) -> str:
@@ -788,6 +852,58 @@ def brief(args: argparse.Namespace) -> int:
     return 0
 
 
+def infer_amendment_impact(field: str, review_impact: str = "plan", explicit_impact: str = "") -> str:
+    if explicit_impact:
+        return explicit_impact
+    if review_impact == "none":
+        return "context_only"
+    if field in {"risk", "scope"}:
+        return "scope_or_risk"
+    if field == "success":
+        return "success_criteria"
+    if field == "required_evidence":
+        return "evidence_only"
+    if field == "context":
+        return "context_only"
+    return "implementation"
+
+
+def validate_amendment_impact(field: str, impact: str, review_impact: str = "plan") -> None:
+    if impact not in AMENDMENT_IMPACTS:
+        raise HarnessError(f"Invalid amendment impact: {impact}")
+    if review_impact == "none" and impact != "context_only":
+        raise HarnessError("--review-impact none is only allowed for context-only amendments; use --impact evidence_only or collaboration_only for lightweight non-context amendments.")
+    if impact == "context_only" and field not in {"context", "other"}:
+        raise HarnessError("--review-impact none is only allowed for context-only amendments; context_only amendments are only allowed for context/other fields.")
+    if impact == "collaboration_only" and field in {"intent", "scope", "risk"}:
+        raise HarnessError("collaboration_only amendments cannot change intent, scope, or risk.")
+    if impact == "evidence_only" and field not in {"required_evidence", "context", "other"}:
+        raise HarnessError("evidence_only amendments are only allowed for required_evidence/context/other fields.")
+
+
+def amendment_requires_plan_review(amendment: Dict[str, Any]) -> bool:
+    if "plan_review_required" in amendment:
+        return parse_bool(amendment.get("plan_review_required"))
+    impact = str(amendment.get("impact") or "").strip()
+    if impact in AMENDMENT_IMPACTS:
+        return bool(AMENDMENT_IMPACTS[impact]["plan_review_required"])
+    return str(amendment.get("review_impact", "plan")) != "none"
+
+
+def amendment_affects_implementation(amendment: Dict[str, Any]) -> bool:
+    if "affects_implementation" in amendment:
+        return parse_bool(amendment.get("affects_implementation"))
+    impact = str(amendment.get("impact") or "").strip()
+    if impact in AMENDMENT_IMPACTS:
+        return bool(AMENDMENT_IMPACTS[impact]["affects_implementation"])
+    return str(amendment.get("review_impact", "plan")) != "none"
+
+
+def latest_amendment_for_contract(wu_path: Path, current_hash: str) -> Optional[Dict[str, Any]]:
+    matches = [a for a in read_jsonl(amendments_path(wu_path)) if a.get("contract_hash") == current_hash]
+    return matches[-1] if matches else None
+
+
 def plan_review_passes(root: Path, wu_path: Path) -> Tuple[bool, List[str], List[str]]:
     blocking: List[str] = []
     warnings: List[str] = []
@@ -805,9 +921,10 @@ def plan_review_passes(root: Path, wu_path: Path) -> Tuple[bool, List[str], List
     reviewed_hash = str(latest.get("reviewed_contract_hash", ""))
     current_hash = contract_hash(wu_path)
     if reviewed_hash and reviewed_hash != current_hash:
-        amendments = [a for a in read_jsonl(amendments_path(wu_path)) if a.get("contract_hash") == current_hash]
-        if amendments and str(amendments[-1].get("review_impact", "")) == "none":
-            warnings.append("Latest passing plan review was for an older contract, but latest amendment declares no plan/review impact.")
+        amendment = latest_amendment_for_contract(wu_path, current_hash)
+        if amendment and not amendment_requires_plan_review(amendment):
+            impact = str(amendment.get("impact") or amendment.get("review_impact") or "lightweight")
+            warnings.append(f"Latest passing plan review was for an older contract, but latest amendment declares no plan/review impact ({impact}); plan re-review is not required.")
         else:
             blocking.append("Latest passing plan review was for an older contract; re-run plan review after amendment.")
     if RISK_ORDER.get(risk, 1) >= 3 and not (latest.get("is_independent") or latest.get("independence_level") == "human_gate"):
@@ -871,8 +988,9 @@ def lock(args: argparse.Namespace) -> int:
 def amend(args: argparse.Namespace) -> int:
     root = args.root
     work_unit_id, wu_path = resolve_wu(root, args.id)
-    if args.review_impact == "none" and args.field != "context":
-        raise HarnessError("--review-impact none is only allowed for context-only amendments. Intent, scope, evidence, risk, success, and stop-condition changes require plan review.")
+    impact = infer_amendment_impact(args.field, args.review_impact, getattr(args, "impact", "") or "")
+    validate_amendment_impact(args.field, impact, args.review_impact)
+    impact_policy = AMENDMENT_IMPACTS[impact]
     decision, blocking, warnings = check_spec(root, wu_path)
     if decision == "BLOCK" and not args.allow_draft:
         raise HarnessError("Cannot record a locked amendment while spec gate blocks: " + "; ".join(blocking))
@@ -884,7 +1002,12 @@ def amend(args: argparse.Namespace) -> int:
         "reason": args.reason,
         "summary": args.summary,
         "actor": args.actor,
+        "impact": impact,
         "review_impact": args.review_impact,
+        "plan_review_required": bool(impact_policy["plan_review_required"]),
+        "affects_implementation": bool(impact_policy["affects_implementation"]),
+        "affects_acceptance": bool(impact_policy["affects_acceptance"]),
+        "recommended_review": impact_policy["recommended_review"],
         "contract_hash": contract_hash(wu_path),
         "created_at": now_iso(),
     }
@@ -892,7 +1015,14 @@ def amend(args: argparse.Namespace) -> int:
     if decision == "BLOCK" and args.allow_draft:
         state = update_state(root, wu_path, status="draft", contract_locked=False, contract_lock_hash="", last_amendment_at=amendment["created_at"], next_safe_action="Finish contract amendment and run spec gate before locking.")
     else:
-        next_action = "Lock and continue; latest amendment declares no plan/review impact." if args.review_impact == "none" else "Re-request plan review before running because contract changed."
+        if amendment_requires_plan_review(amendment):
+            next_action = "Re-request plan review before running because the amendment changes planning, implementation, scope, risk, or success criteria."
+        elif impact == "collaboration_only":
+            next_action = "Record collaboration/publication evidence; plan re-review is not required unless implementation scope changed."
+        elif impact == "evidence_only":
+            next_action = "Record only the new or stale evidence claims; use close-addendum review instead of full close review when implementation is unchanged."
+        else:
+            next_action = "Lock and continue; latest amendment declares no plan/review impact."
         state = update_state(root, wu_path, status="specified", contract_locked=True, contract_lock_hash=contract_hash(wu_path), last_amendment_at=amendment["created_at"], next_safe_action=next_action)
     print(json.dumps({
         "schema_version": "harness.amendment_recorded.v1",
@@ -903,7 +1033,6 @@ def amend(args: argparse.Namespace) -> int:
         "warnings": warnings,
     }, ensure_ascii=False, indent=2))
     return 0
-
 
 def set_state(args: argparse.Namespace) -> int:
     root = args.root
@@ -993,7 +1122,14 @@ def request_review(args: argparse.Namespace) -> int:
     root = args.root
     work_unit_id, wu_path = resolve_wu(root, args.id)
     request_id = "review-request-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:6]
-    required_inputs = ["contract.md", "scope boundary", "risk notes", "context pointers", "proposed execution plan"] if args.mode == "plan" else ["contract.md", "git diff", "evidence/receipts.jsonl", "scope boundary", "risk notes"]
+    if args.mode == "plan":
+        required_inputs = ["contract.md", "scope boundary", "risk notes", "context pointers", "proposed execution plan"]
+    elif args.mode == "publication":
+        required_inputs = ["contract.md", "GitHub issue/PR/branch references", "publication evidence receipts", "scope boundary"]
+    elif args.mode == "close-addendum":
+        required_inputs = ["contract.md", "latest amendment", "previous close review", "new or affected evidence receipts", "git diff hash"]
+    else:
+        required_inputs = ["contract.md", "git diff", "evidence/receipts.jsonl", "scope boundary", "risk notes"]
     obj = {
         "schema_version": "harness.review_request.v1",
         "request_id": request_id,
@@ -1013,8 +1149,8 @@ def request_review(args: argparse.Namespace) -> int:
 def submit_review(args: argparse.Namespace) -> int:
     root = args.root
     work_unit_id, wu_path = resolve_wu(root, args.id)
-    if args.mode == "close" and args.reviewer_role == args.builder_role:
-        raise HarnessError("Close review cannot be written by the builder role.")
+    if args.mode in {"close", "close-addendum"} and args.reviewer_role == args.builder_role:
+        raise HarnessError("Close review or close-addendum cannot be written by the builder role.")
     is_independent = args.independence_level in {"separate_role", "fresh_context", "human_gate"} and args.reviewer_role != args.builder_role
     review_id = "review-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:6]
     obj = {
@@ -1143,15 +1279,16 @@ def check_scope(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
     return ("BLOCK" if blocking else "PASS"), blocking, warnings
 
 
-def check_verification(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
+def verification_detail_report(root: Path, wu_path: Path) -> Tuple[List[Dict[str, Any]], List[str], List[str]]:
     blocking: List[str] = []
     warnings: List[str] = []
+    details: List[Dict[str, Any]] = []
     state = load_json(state_path(wu_path), {})
     work_unit_id = str(state.get("work_unit_id") or wu_path.name)
     required = required_evidence_items(wu_path)
     if not required:
         blocking.append("No required evidence IDs found in contract.md. Add claim-relative evidence under ## Required evidence.")
-        return "BLOCK", blocking, warnings
+        return details, blocking, warnings
 
     cur_head = head_commit(root)
     risk = str(state.get("risk") or contract_meta(wu_path).get("risk", "low"))
@@ -1162,6 +1299,15 @@ def check_verification(root: Path, wu_path: Path) -> Tuple[str, List[str], List[
 
     for item in required:
         ev_id = str(item.get("id", "")).strip()
+        detail: Dict[str, Any] = {
+            "claim": ev_id,
+            "status": "unknown",
+            "reason": "",
+            "latest_receipt_id": "",
+            "requires_rerun": False,
+            "equivalence_possible": False,
+            "minimal_next_action": "",
+        }
         receipt = latest_pass_for_claim(wu_path, work_unit_id, ev_id)
         if receipt is None:
             waivers = scoped_waivers.get(ev_id, [])
@@ -1174,43 +1320,86 @@ def check_verification(root: Path, wu_path: Path) -> Tuple[str, List[str], List[
                     break
                 invalid_reasons.append(reason)
             if valid_waiver:
+                detail.update({
+                    "status": "waived",
+                    "reason": f"Satisfied by scoped waiver {valid_waiver.get('waiver_id')}",
+                    "minimal_next_action": "Confirm waiver risk acceptance remains appropriate before review or archive.",
+                })
                 warnings.append(f"Required evidence {ev_id} is satisfied by scoped waiver {valid_waiver.get('waiver_id')}; ensure risk acceptance remains appropriate.")
-                continue
-            if invalid_reasons:
-                blocking.append(f"Required evidence {ev_id} has only invalid waiver(s): {', '.join(invalid_reasons)}.")
             else:
-                blocking.append(f"Missing fresh pass evidence for required claim {ev_id}.")
+                reason = f"Required evidence {ev_id} has only invalid waiver(s): {', '.join(invalid_reasons)}." if invalid_reasons else f"Missing fresh pass evidence for required claim {ev_id}."
+                detail.update({
+                    "status": "missing",
+                    "reason": reason,
+                    "requires_rerun": True,
+                    "minimal_next_action": f"Produce and record a fresh pass receipt for {ev_id}, or create a scoped human-approved waiver if evidence cannot be produced.",
+                })
+                blocking.append(reason)
+            details.append(detail)
             continue
 
+        detail["latest_receipt_id"] = str(receipt.get("receipt_id", ""))
+        claim_blocking: List[str] = []
+        claim_warnings: List[str] = []
         if receipt.get("result") == "skipped":
-            blocking.append(f"Required evidence {ev_id} is skipped; skipped receipts cannot satisfy verification.")
+            claim_blocking.append(f"Required evidence {ev_id} is skipped; skipped receipts cannot satisfy verification.")
+
         receipt_impl_diff = str(receipt.get("implementation_diff_hash") or "")
         lifecycle_only_drift = receipt.get("diff_hash") != cur_diff and receipt_impl_diff and receipt_impl_diff == cur_impl_diff
         if receipt.get("head_commit") != cur_head:
             if lifecycle_only_drift:
-                warnings.append(f"Evidence {ev_id} was recorded on an older HEAD, but implementation content is unchanged; only non-implementation context changed after evidence.")
+                claim_warnings.append(f"Evidence {ev_id} was recorded on an older HEAD, but implementation content is unchanged; only non-implementation context changed after evidence.")
             else:
-                warnings.append(f"Evidence {ev_id} was recorded on a different HEAD. Confirm documented equivalence or rerun.")
+                claim_warnings.append(f"Evidence {ev_id} was recorded on a different HEAD. Confirm documented equivalence or rerun.")
         if receipt.get("diff_hash") != cur_diff:
             if lifecycle_only_drift:
-                warnings.append(f"Evidence {ev_id} diff_hash changed, but implementation content is unchanged.")
+                claim_warnings.append(f"Evidence {ev_id} diff_hash changed, but implementation content is unchanged.")
             else:
-                blocking.append(f"Evidence {ev_id} is stale: current diff hash differs from receipt diff_hash.")
-        if not receipt_has_reviewable_support(receipt):
-            blocking.append(f"Evidence {ev_id} lacks command, command log, artifact, or manual artifact reference.")
-        if RISK_ORDER.get(risk, 1) >= 2 and not (receipt.get("artifact_uri") or receipt.get("command_log_ref") or receipt.get("manual_artifact_ref")):
-            blocking.append(f"Evidence {ev_id} for {risk} risk needs command_log_ref, artifact_uri, or manual_artifact_ref; command text alone is not enough.")
+                claim_blocking.append(f"Evidence {ev_id} is stale: current diff hash differs from receipt diff_hash.")
 
-    # Flag receipts whose claim_ref is not in the contract. They are not blocking by
-    # themselves, but they cannot satisfy completion and usually indicate drift.
+        if not receipt_has_reviewable_support(receipt):
+            claim_blocking.append(f"Evidence {ev_id} lacks command, command log, artifact, or manual artifact reference.")
+        if RISK_ORDER.get(risk, 1) >= 2 and not (receipt.get("artifact_uri") or receipt.get("command_log_ref") or receipt.get("manual_artifact_ref")):
+            claim_blocking.append(f"Evidence {ev_id} for {risk} risk needs command_log_ref, artifact_uri, or manual_artifact_ref; command text alone is not enough.")
+
+        blocking.extend(claim_blocking)
+        warnings.extend(claim_warnings)
+        if claim_blocking:
+            detail.update({
+                "status": "stale" if any("stale" in x for x in claim_blocking) else "unsupported",
+                "reason": "; ".join(claim_blocking),
+                "requires_rerun": any("stale" in x or "skipped" in x for x in claim_blocking),
+                "equivalence_possible": lifecycle_only_drift,
+                "minimal_next_action": f"Refresh or replace the receipt for {ev_id}; if evidence is impossible, create a scoped human-approved waiver.",
+            })
+        elif claim_warnings:
+            detail.update({
+                "status": "equivalent_warn" if lifecycle_only_drift else "warn",
+                "reason": "; ".join(claim_warnings),
+                "requires_rerun": False,
+                "equivalence_possible": lifecycle_only_drift,
+                "minimal_next_action": "No automatic rerun required if reviewer accepts documented equivalence; otherwise rerun targeted evidence.",
+            })
+        else:
+            detail.update({
+                "status": "satisfied",
+                "reason": "Fresh pass evidence is present and reviewable.",
+                "minimal_next_action": "No action for this claim.",
+            })
+        details.append(detail)
+
     required_ids = {str(x.get("id", "")).strip() for x in required}
     for receipt in evidence_receipts(wu_path, work_unit_id):
         claim = str(receipt.get("claim_ref", "")).strip()
         if claim and claim not in required_ids:
             warnings.append(f"Receipt {receipt.get('receipt_id')} references non-contract claim {claim}; it does not satisfy completion.")
 
-    return ("BLOCK" if blocking else "WARN" if warnings else "PASS"), blocking, warnings
+    return details, blocking, warnings
 
+
+def check_verification(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
+    _details, blocking, warnings = verification_detail_report(root, wu_path)
+    return ("BLOCK" if blocking else "WARN" if warnings else "PASS"), blocking, warnings
 
 def check_plan_review(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
     ok, blocking, warnings = plan_review_passes(root, wu_path)
@@ -1227,53 +1416,85 @@ def check_review(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
     state = load_json(state_path(wu_path))
     work_unit_id = str(state.get("work_unit_id") or wu_path.name)
     risk = state.get("risk") or contract_meta(wu_path).get("risk", "low")
-    close_passes = [v for v in review_verdicts(wu_path) if v.get("mode") == "close" and v.get("decision") in PASS_DECISIONS]
-    verdicts = sorted(close_passes, key=lambda v: (v.get("created_at", ""), v.get("review_id", "")))[-1:]
+    all_passes = [v for v in review_verdicts(wu_path) if v.get("decision") in PASS_DECISIONS]
+    close_passes = [v for v in all_passes if v.get("mode") == "close"]
+    close_verdicts = sorted(close_passes, key=lambda v: (v.get("created_at", ""), v.get("review_id", "")))[-1:]
+    latest_close = close_verdicts[-1] if close_verdicts else None
+
     if RISK_ORDER.get(risk, 1) <= 1:
-        if not verdicts:
+        if not latest_close:
             warnings.append("Low/trivial risk has no close review. Self-check may be acceptable.")
             return "WARN", [], warnings
-    if RISK_ORDER.get(risk, 1) >= 2 and not verdicts:
+    if RISK_ORDER.get(risk, 1) >= 2 and not latest_close:
         blocking.append(f"{risk} risk requires a passing close review verdict.")
         return "BLOCK", blocking, warnings
+
+    supplemental = []
+    if latest_close:
+        close_time = str(latest_close.get("created_at", ""))
+        supplemental = [
+            v for v in all_passes
+            if v.get("mode") in {"close-addendum", "publication"}
+            and str(v.get("created_at", "")) >= close_time
+        ]
+    verdicts = close_verdicts + sorted(supplemental, key=lambda v: (v.get("created_at", ""), v.get("review_id", "")))
+
+    current_contract_hash = contract_hash(wu_path)
+    if latest_close and str(latest_close.get("reviewed_contract_hash", "")) != current_contract_hash:
+        amendments = [a for a in read_jsonl(amendments_path(wu_path)) if a.get("contract_hash") == current_contract_hash]
+        affected_impl = any(amendment_affects_implementation(a) or amendment_requires_plan_review(a) for a in amendments)
+        current_supplement = [v for v in supplemental if str(v.get("reviewed_contract_hash", "")) == current_contract_hash]
+        if affected_impl:
+            blocking.append("Latest close review was for an older contract and later amendment may affect implementation/scope/risk; run a full close review.")
+        elif amendments and not current_supplement:
+            warnings.append("Latest close review was for an older contract. Implementation appears unchanged, but a close-addendum or publication review should cover the latest lightweight amendment.")
+        elif current_supplement:
+            warnings.append("Latest close review predates a lightweight amendment; supplemental review covers the current contract.")
+
     if RISK_ORDER.get(risk, 1) >= 3:
-        independent = [v for v in verdicts if v.get("is_independent") or v.get("independence_level") == "human_gate"]
+        independent = [v for v in verdicts if v.get("mode") == "close" and (v.get("is_independent") or v.get("independence_level") == "human_gate")]
         if not independent:
             blocking.append(f"{risk} risk requires independent close review or human gate.")
     for v in verdicts:
-        if v.get("mode") == "close" and v.get("reviewer_role") == v.get("builder_role"):
-            blocking.append("Builder-authored close review detected.")
+        if v.get("mode") in {"close", "close-addendum"} and v.get("reviewer_role") == v.get("builder_role"):
+            blocking.append("Builder-authored close review or close-addendum detected.")
 
     required = required_evidence_items(wu_path)
     base_commit = str(state.get("base_commit", ""))
     cur_head = head_commit(root)
     cur_diff = diff_hash(root, base_commit)
     cur_impl_diff = implementation_diff_hash(root, base_commit)
+    combined_refs: set[str] = set()
     for v in verdicts:
-        refs = set(str(x).strip() for x in v.get("evidence_refs", []) if str(x).strip())
-        if RISK_ORDER.get(risk, 1) >= 2 and not refs:
-            blocking.append("Passing close review for medium+ risk must cite fresh evidence receipt IDs.")
-        for item in required:
-            ev_id = str(item.get("id", "")).strip()
-            receipt = latest_pass_for_claim(wu_path, work_unit_id, ev_id)
-            if receipt is None:
-                continue
-            rid = str(receipt.get("receipt_id", ""))
-            receipt_impl_diff = str(receipt.get("implementation_diff_hash") or "")
-            lifecycle_only_drift = receipt.get("diff_hash") != cur_diff and receipt_impl_diff and receipt_impl_diff == cur_impl_diff
-            if receipt.get("head_commit") != cur_head or receipt.get("diff_hash") != cur_diff:
-                if lifecycle_only_drift:
-                    warnings.append(f"Close review cites evidence {ev_id} from an older HEAD, but implementation content is unchanged; only non-implementation context changed after review.")
-                else:
-                    blocking.append(f"Close review cites stale evidence context for {ev_id}; rerun verification before passing review.")
-            if refs and rid not in refs:
-                msg = f"Passing close review does not cite latest fresh receipt {rid} for required claim {ev_id}."
-                if RISK_ORDER.get(risk, 1) >= 2:
-                    blocking.append(msg)
-                else:
-                    warnings.append(msg)
-    return ("BLOCK" if blocking else "WARN" if warnings else "PASS"), blocking, warnings
+        combined_refs.update(str(x).strip() for x in v.get("evidence_refs", []) if str(x).strip())
+    if RISK_ORDER.get(risk, 1) >= 2 and not combined_refs:
+        blocking.append("Passing close review or supplemental review for medium+ risk must cite fresh evidence receipt IDs.")
 
+    for item in required:
+        ev_id = str(item.get("id", "")).strip()
+        receipt = latest_pass_for_claim(wu_path, work_unit_id, ev_id)
+        if receipt is None:
+            if RISK_ORDER.get(risk, 1) >= 2:
+                blocking.append(f"Passing review set has no pass receipt for required claim {ev_id}.")
+            else:
+                warnings.append(f"Passing review set has no pass receipt for required claim {ev_id}.")
+            continue
+        rid = str(receipt.get("receipt_id", ""))
+        receipt_impl_diff = str(receipt.get("implementation_diff_hash") or "")
+        lifecycle_only_drift = receipt.get("diff_hash") != cur_diff and receipt_impl_diff and receipt_impl_diff == cur_impl_diff
+        if receipt.get("head_commit") != cur_head or receipt.get("diff_hash") != cur_diff:
+            if lifecycle_only_drift:
+                warnings.append(f"Close review cites evidence {ev_id} from an older HEAD, but implementation content is unchanged; only non-implementation context changed after review.")
+            else:
+                blocking.append(f"Close review cites stale evidence context for {ev_id}; rerun verification before passing review.")
+        if combined_refs and rid not in combined_refs:
+            msg = f"Passing review set does not cite latest fresh receipt {rid} for required claim {ev_id}."
+            if RISK_ORDER.get(risk, 1) >= 2:
+                blocking.append(msg)
+            else:
+                warnings.append(msg)
+
+    return ("BLOCK" if blocking else "WARN" if warnings else "PASS"), blocking, warnings
 
 def git_changed_paths(root: Path, base_commit: str = "") -> set[str]:
     paths: set[str] = set()
@@ -1719,6 +1940,10 @@ def check(args: argparse.Namespace) -> int:
         "required_next_action": "Fix blocking reasons." if blocking else "Proceed with caution." if warnings else "Gate passed.",
         "created_at": now_iso()
     }
+    if args.gate == "verification":
+        details, _b, _w = verification_detail_report(root, wu_path)
+        out["evidence_status"] = details
+        out["minimal_evidence_plan"] = [d for d in details if d.get("status") not in {"satisfied", "waived"}]
     print(json.dumps(out, ensure_ascii=False, indent=2))
     return 2 if decision == "BLOCK" and args.strict else 0
 
@@ -1875,7 +2100,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--reason", required=True)
     p.add_argument("--summary", required=True)
     p.add_argument("--actor", default="human")
-    p.add_argument("--review-impact", default="plan", choices=["plan", "none"], help="Use none only with --field context when the amendment does not affect plan, scope, evidence, risk, success, or user intent.")
+    p.add_argument("--review-impact", default="plan", choices=["plan", "none"], help="Backward-compatible flag. Prefer --impact for precise amendment classification.")
+    p.add_argument("--impact", choices=sorted(AMENDMENT_IMPACTS.keys()), help="Classify amendment impact so controller can avoid unnecessary plan/evidence/review churn.")
     p.add_argument("--allow-draft", action="store_true", help="Record amendment even when spec gate blocks; leaves Work Unit unlocked in draft.")
     p.set_defaults(func=amend)
 
@@ -1934,14 +2160,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("request-review")
     p.add_argument("--id")
-    p.add_argument("--mode", default="close", choices=["plan", "close", "risk", "security", "architecture", "evaluator"])
+    p.add_argument("--mode", default="close", choices=REVIEW_MODES)
     p.add_argument("--reviewer-role", default="reviewer-agent")
     p.set_defaults(func=request_review)
 
     p = sub.add_parser("submit-review")
     p.add_argument("--id")
     p.add_argument("--request-id")
-    p.add_argument("--mode", default="close", choices=["plan", "close", "risk", "security", "architecture", "evaluator"])
+    p.add_argument("--mode", default="close", choices=REVIEW_MODES)
     p.add_argument("--decision", required=True, choices=["PASS", "PASS_WITH_RISK_ACCEPTED", "CHANGES_REQUESTED", "REJECTED", "BLOCKED", "NEEDS_HUMAN_GATE"])
     p.add_argument("--reviewer-role", default="reviewer-agent")
     p.add_argument("--builder-role", default="agent")
