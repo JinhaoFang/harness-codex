@@ -9,6 +9,9 @@ from typing import Optional
 
 
 def root() -> Path:
+    found = find_harness_root(Path.cwd().resolve()) or find_harness_root(Path(__file__).resolve().parents[2])
+    if found:
+        return found
     try:
         out = subprocess.run(["git", "rev-parse", "--show-toplevel"], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False, timeout=5)
         if out.returncode == 0 and out.stdout.strip():
@@ -16,6 +19,16 @@ def root() -> Path:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
     return Path.cwd().resolve()
+
+
+def find_harness_root(start: Path) -> Optional[Path]:
+    cur = start if start.is_dir() else start.parent
+    while True:
+        if (cur / ".harness" / "config.json").exists() and (cur / "harness" / "cli" / "harnessctl.py").exists():
+            return cur
+        if cur.parent == cur:
+            return None
+        cur = cur.parent
 
 
 def current_work_unit_id(base: Path) -> Optional[str]:

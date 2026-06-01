@@ -14,6 +14,8 @@ from types import SimpleNamespace
 
 from harness.cli import harnessctl
 
+os.environ.setdefault("HARNESS_HOOK_SOUND", "0")
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CTL = PROJECT_ROOT / "harness" / "cli" / "harnessctl.py"
 
@@ -244,6 +246,31 @@ class HarnessCtlTests(unittest.TestCase):
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
+    def test_hooks_find_harness_root_inside_outer_git_repo(self):
+        outer = Path(tempfile.mkdtemp(prefix="harness-outer-"))
+        try:
+            subprocess.run(["git", "init"], cwd=outer, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=10)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=outer, check=True, timeout=10)
+            subprocess.run(["git", "config", "user.name", "Test User"], cwd=outer, check=True, timeout=10)
+            root = outer / "nested"
+            root.mkdir()
+            (root / "README.md").write_text("test\n", encoding="utf-8")
+            subprocess.run(["cp", "-R", str(PROJECT_ROOT / "harness"), str(root / "harness")], check=True, timeout=10)
+            subprocess.run(["rm", "-rf", str(root / "harness" / "tests"), str(root / "harness" / "__pycache__"), str(root / "harness" / "cli" / "__pycache__"), str(root / "harness" / "hooks" / "__pycache__")], check=False, timeout=10)
+            (root / "AGENTS.md").write_text("test\n", encoding="utf-8")
+            subprocess.run(["git", "add", "."], cwd=outer, check=True, timeout=10)
+            subprocess.run(["git", "commit", "-m", "init"], cwd=outer, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=10)
+
+            run(root, "init")
+            run(root, "new", "--id", "WU-NESTED-HOOK", "--title", "Nested Hook", "--type", "test", "--risk", "low")
+            context = root / "harness" / "hooks" / "context_router.py"
+            proc = subprocess.run([sys.executable, str(context), "SubagentStart"], cwd=root, text=True, input=json.dumps({"agent_type": "harness_reviewer"}), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            out = json.loads(proc.stdout)
+            self.assertIn("active Work Unit WU-NESTED-HOOK", out["hookSpecificOutput"]["additionalContext"])
+            self.assertIn("Reviewer must not ask", out["hookSpecificOutput"]["additionalContext"])
+        finally:
+            shutil.rmtree(outer, ignore_errors=True)
+
     def test_scope_gate_catches_committed_out_of_bounds_diff(self):
         root = make_repo()
         try:
@@ -297,10 +324,13 @@ class HarnessCtlTests(unittest.TestCase):
             run(root, "submit-review", "--id", "WU-REVIEW", "--mode", "close", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context", "--evidence-ref", receipt_id)
             proc = run(root, "check", "--id", "WU-REVIEW", "--gate", "review", "--strict")
             self.assertIn('"decision": "PASS"', proc.stdout)
+            state = json.loads((root / ".harness" / "work-units" / "active" / "WU-REVIEW" / "state.json").read_text(encoding="utf-8"))
+            self.assertIn("Archive locally", state["next_safe_action"])
+            self.assertIn("follow-up Work Unit", state["next_safe_action"])
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
-    def test_lifecycle_only_commit_does_not_stale_verified_work(self):
+    def test_non_implementation_context_change_does_not_stale_verified_work(self):
         root = make_repo()
         try:
             run(root, "init")
@@ -319,10 +349,10 @@ class HarnessCtlTests(unittest.TestCase):
             subprocess.run(["git", "commit", "-m", "feat: implement work unit"], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=10)
             proc = run(root, "check", "--id", "WU-LIFECYCLE", "--gate", "verification", "--strict")
             self.assertIn('"decision": "WARN"', proc.stdout)
-            self.assertIn("implementation diff is unchanged", proc.stdout)
+            self.assertIn("implementation content is unchanged", proc.stdout)
             proc = run(root, "check", "--id", "WU-LIFECYCLE", "--gate", "review", "--strict")
             self.assertIn('"decision": "WARN"', proc.stdout)
-            self.assertIn("implementation diff is unchanged", proc.stdout)
+            self.assertIn("implementation content is unchanged", proc.stdout)
 
             run(root, "handoff", "--id", "WU-LIFECYCLE", "--next-safe-action", "Archive after merge.")
             subprocess.run(["git", "add", "-f", ".harness/work-units/active/WU-LIFECYCLE"], cwd=root, check=True, timeout=10)
@@ -330,7 +360,7 @@ class HarnessCtlTests(unittest.TestCase):
 
             proc = run(root, "check", "--id", "WU-LIFECYCLE", "--gate", "verification", "--strict")
             self.assertIn('"decision": "WARN"', proc.stdout)
-            self.assertIn("lifecycle-only artifacts changed", proc.stdout)
+            self.assertIn("implementation content is unchanged", proc.stdout)
             proc = run(root, "check", "--id", "WU-LIFECYCLE", "--gate", "review", "--strict")
             self.assertIn('"decision": "WARN"', proc.stdout)
 

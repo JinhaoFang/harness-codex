@@ -1039,7 +1039,7 @@ def submit_review(args: argparse.Namespace) -> int:
         "created_at": now_iso()
     }
     write_json(reviews_dir(wu_path) / f"verdict-{review_id}.json", obj)
-    next_action = "Integrate or archive if remaining gates pass." if args.decision in PASS_DECISIONS else "Address review findings and resubmit."
+    next_action = "Archive locally if remaining gates pass; reopen or create a follow-up Work Unit if PR review/merge requires more changes." if args.decision in PASS_DECISIONS else "Address review findings and resubmit."
     update_state(root, wu_path, next_safe_action=next_action)
     print(json.dumps(obj, ensure_ascii=False, indent=2))
     return 0
@@ -1188,12 +1188,12 @@ def check_verification(root: Path, wu_path: Path) -> Tuple[str, List[str], List[
         lifecycle_only_drift = receipt.get("diff_hash") != cur_diff and receipt_impl_diff and receipt_impl_diff == cur_impl_diff
         if receipt.get("head_commit") != cur_head:
             if lifecycle_only_drift:
-                warnings.append(f"Evidence {ev_id} was recorded on an older HEAD, but implementation diff is unchanged; lifecycle-only artifacts changed after evidence.")
+                warnings.append(f"Evidence {ev_id} was recorded on an older HEAD, but implementation content is unchanged; only non-implementation context changed after evidence.")
             else:
                 warnings.append(f"Evidence {ev_id} was recorded on a different HEAD. Confirm documented equivalence or rerun.")
         if receipt.get("diff_hash") != cur_diff:
             if lifecycle_only_drift:
-                warnings.append(f"Evidence {ev_id} diff_hash changed only because lifecycle artifacts changed after evidence.")
+                warnings.append(f"Evidence {ev_id} diff_hash changed, but implementation content is unchanged.")
             else:
                 blocking.append(f"Evidence {ev_id} is stale: current diff hash differs from receipt diff_hash.")
         if not receipt_has_reviewable_support(receipt):
@@ -1263,7 +1263,7 @@ def check_review(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
             lifecycle_only_drift = receipt.get("diff_hash") != cur_diff and receipt_impl_diff and receipt_impl_diff == cur_impl_diff
             if receipt.get("head_commit") != cur_head or receipt.get("diff_hash") != cur_diff:
                 if lifecycle_only_drift:
-                    warnings.append(f"Close review cites evidence {ev_id} from an older HEAD, but implementation diff is unchanged; lifecycle-only artifacts changed after review.")
+                    warnings.append(f"Close review cites evidence {ev_id} from an older HEAD, but implementation content is unchanged; only non-implementation context changed after review.")
                 else:
                     blocking.append(f"Close review cites stale evidence context for {ev_id}; rerun verification before passing review.")
             if refs and rid not in refs:

@@ -17,7 +17,7 @@ python3 harness/cli/harnessctl.py check --id <WU-ID> --gate spec --strict
 python3 harness/cli/harnessctl.py lock --id <WU-ID> --status ready
 ```
 
-For non-trivial work, unresolved open questions, placeholders, missing write boundary, missing required evidence, or missing stop conditions block lock/readiness. After lock, changes to intent, scope, risk, required evidence, success criteria, or stop conditions must be recorded with `harnessctl amend`; otherwise readiness/running transitions are blocked. Re-run plan review only when the amendment changes the plan, implementation boundary, evidence plan, risk, success criteria, or user intent. Do not force a new review for lifecycle-only corrections that do not affect implementation sufficiency.
+For non-trivial work, unresolved open questions, placeholders, missing write boundary, missing required evidence, or missing stop conditions block lock/readiness. After lock, changes to intent, scope, risk, required evidence, success criteria, or stop conditions must be recorded with `harnessctl amend`; otherwise readiness/running transitions are blocked. Re-run plan review only when the amendment changes the plan, implementation boundary, evidence plan, risk, success criteria, or user intent. Do not force a new review for context-only corrections that do not affect implementation sufficiency.
 
 ## 3. Route context
 
@@ -42,7 +42,7 @@ Do not apply TDD dogmatically to pure docs, mechanical renames, generated snapsh
 
 Every completion claim needs fresh, claim-relative evidence or waiver. Skipped checks are not pass results. For medium or higher risk, passing evidence should include a command log, artifact URI, or manual artifact reference so review can inspect what actually happened.
 
-Evidence freshness is strict for implementation changes. Harness lifecycle artifacts under `.harness/` can change after evidence or review for handoff, receipts, review records, or archival notes; those lifecycle-only changes should warn rather than force all product evidence to be rerun.
+Evidence freshness is strict for implementation changes. HEAD, diff representation, or harness lifecycle artifacts under `.harness/` can change after evidence or review for commits, handoff, receipts, review records, or archival notes; when implementation content is unchanged, those non-implementation context changes should warn rather than force all product evidence to be rerun.
 
 Gate:
 
@@ -76,9 +76,11 @@ python3 harness/cli/harnessctl.py check --id <WU-ID> --gate review --strict
 
 Use GitHub after the local task shape is grounded. Create issues, branches, commits, and PRs after the Work Unit is specified and the relevant plan review has passed. GitHub records collaboration state; it does not replace the contract, evidence receipts, review verdicts, waivers, or controller gates.
 
+Do not keep a local Work Unit active only because a PR is waiting for merge. Once local implementation, evidence, close review, and PR/update publication are complete, archive the Work Unit locally with a no-next-step reason or handoff. If PR review or merge later requires changes, reopen the archived Work Unit or create a follow-up Work Unit with the new scope.
+
 ## 8. Handoff or archive
 
-A task can be archived only when it has evidence/waiver, required review, and either a handoff or an explicit `--no-next-step-reason`.
+A task can be archived when local completion gates pass: evidence/waiver, required review, and either a handoff or an explicit `--no-next-step-reason`. Remote PR merge is not a prerequisite for local archive because the harness cannot reliably infer merge state from local repository state.
 
 ## 9. Compound or prune
 

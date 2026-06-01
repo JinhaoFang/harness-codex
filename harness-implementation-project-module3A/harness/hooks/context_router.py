@@ -8,6 +8,10 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+sys.dont_write_bytecode = True
+
+from hook_sound import play as play_hook_sound
+
 
 def load_event() -> Dict[str, Any]:
     raw = sys.stdin.read()
@@ -20,9 +24,16 @@ def load_event() -> Dict[str, Any]:
 
 
 def root(event: Dict[str, Any]) -> Path:
+    starts = []
     cwd = event.get("cwd")
     if cwd:
-        return Path(str(cwd)).resolve()
+        starts.append(Path(str(cwd)).resolve())
+    starts.append(Path.cwd().resolve())
+    starts.append(Path(__file__).resolve().parents[2])
+    for start in starts:
+        found = find_harness_root(start)
+        if found:
+            return found
     try:
         out = subprocess.run(["git", "rev-parse", "--show-toplevel"], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=False, timeout=5)
         if out.returncode == 0 and out.stdout.strip():
@@ -30,6 +41,16 @@ def root(event: Dict[str, Any]) -> Path:
     except (FileNotFoundError, subprocess.TimeoutExpired):
         pass
     return Path.cwd().resolve()
+
+
+def find_harness_root(start: Path) -> Optional[Path]:
+    cur = start if start.is_dir() else start.parent
+    while True:
+        if (cur / ".harness" / "config.json").exists() and (cur / "harness" / "cli" / "harnessctl.py").exists():
+            return cur
+        if cur.parent == cur:
+            return None
+        cur = cur.parent
 
 
 def current_work_unit_id(base: Path) -> Optional[str]:
@@ -51,6 +72,8 @@ def load_state(base: Path, wu_id: str) -> Dict[str, Any]:
 
 
 def context_for_event(base: Path, event_name: str, event: Dict[str, Any]) -> str:
+    if event_name == "SubagentStart":
+        play_hook_sound("subagent")
     wu_id = current_work_unit_id(base)
     if not wu_id:
         if event_name == "UserPromptSubmit":

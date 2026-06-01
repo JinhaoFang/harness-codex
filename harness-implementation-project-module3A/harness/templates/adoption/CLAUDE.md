@@ -94,6 +94,8 @@ python3 harness/cli/harnessctl.py check --id <WU-ID> --gate verification --stric
 
 GitHub issue、分支和 PR 应在工作单元已规范化、契约已锁定且所需方案审查通过后创建。GitHub 是协作表面，不替代澄清、契约、证据或审查门禁。
 
+本地实现、证据、结项审查和 PR/进度更新完成后，可以归档本地 Work Unit；不要仅因为 PR 等待远端 review/merge 就让 `.harness/current` 长期指向已完成任务。若后续 PR review 或 merge 需要改动，重新打开归档任务或创建 follow-up Work Unit。
+
 ## 10. 审查与验收 (Review And Acceptance)
 
 - **方案审查（Plan Review）**：在实施前检查提议的工作是否立足于现实。

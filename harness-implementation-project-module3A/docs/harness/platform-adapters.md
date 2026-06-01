@@ -72,18 +72,18 @@ Review verdict / human gate -> acceptance authority
 
 Codex hooks can run deterministic policy scripts at multiple lifecycle points. Treat them as defense-in-depth. Critical safety boundaries should also be protected by sandboxing, permissions, branch protection, CI, or human approval.
 
-Recommended project hooks in this template:
+Default Codex hooks retained by this template:
 
 | Event | Harness use | Boundary note |
 |---|---|---|
-| `SessionStart` | add a small recovery brief for the active Work Unit | context only |
-| `UserPromptSubmit` | remind the model to clarify/spec non-trivial work before editing | context or prompt block only |
-| `PreToolUse` | deny deterministic dangerous shell/edit operations | guardrail, not complete enforcement |
-| `PermissionRequest` | deny requests that remain unsafe; otherwise let native approval flow continue | approval support |
 | `SubagentStart` | inject minimal worker/reviewer role context | context only |
 | `PreCompact` | stop compaction when changed active work has no handoff | recovery guard |
 | `PostCompact` | add recovery context after compaction | context only |
 | `Stop` | continue the turn when changed active work lacks fresh evidence | completion guard |
+
+`SessionStart`, `UserPromptSubmit`, `PreToolUse`, and `PermissionRequest` are optional extensions, not defaults. For Codex, `.codex/hooks.json` must live at the project root that Codex opens; hooks nested under an unopened subdirectory may not run. Even when `SubagentStart` is configured, the main agent should still pass the Work Unit ID and required input bundle explicitly to worker/reviewer subagents.
+
+Hook sounds are best-effort only. On macOS, `SubagentStart` plays a short system sound, and `Stop` plays a completion sound when it does not block the agent. Set `HARNESS_HOOK_SOUND=0` to disable sound; non-macOS and CI environments stay silent.
 
 Do not return `permissionDecision: "ask"` from Codex `PreToolUse`. Ask-class behavior belongs in the native approval flow and `PermissionRequest`; `PreToolUse` should deny, add context, rewrite allowed input, or stay silent.
 

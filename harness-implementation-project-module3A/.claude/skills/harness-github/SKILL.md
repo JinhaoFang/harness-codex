@@ -105,13 +105,23 @@ fix: reject stale evidence receipts
 test: cover committed out-of-bounds diff
 ```
 
-Use the body for traceability and verification, not a long narrative:
+Use the body for quick human understanding first, then traceability and verification. Do not make readers open evidence receipts or the diff just to understand what changed.
 
 ```text
+Summary:
+- Added the bounded scope gate for committed and uncommitted changes.
+- Updated controller tests for out-of-bounds committed paths.
+
 Work Unit: WU-123
 Refs: #123
-Evidence: EV-SCOPE-COMMITTED via `python3 -m unittest ...`
 Risk: low
+
+Verification:
+- EV-SCOPE-COMMITTED ev-... via `python3 -m unittest ...`
+
+Reviews:
+- Plan: review-...
+- Close: review-...
 ```
 
 Use `Closes #123` only when this commit or PR actually completes the issue. Otherwise use `Refs: #123`.
@@ -145,6 +155,16 @@ Use `Closes #123` only when this commit or PR actually completes the issue. Othe
 - Requested reviewer(s):
 - Close review verdict: `<review-id>` or pending
 ```
+
+## Local archive after PR publication
+
+Do not keep a local Work Unit active only because a PR is waiting for merge. The local Work Unit can be archived after implementation, evidence, close review, and PR/update publication are complete. Use a clear no-next-step reason, for example:
+
+```bash
+python3 harness/cli/harnessctl.py archive --id <WU-ID> --no-next-step-reason "Local work complete; PR #123 is awaiting remote review/merge."
+```
+
+If PR review or merge later requires changes, reopen the archived Work Unit or create a follow-up Work Unit with the new scope. Do not let remote PR waiting state keep `.harness/current` pointing at completed local work.
 
 ## Progress comment
 
