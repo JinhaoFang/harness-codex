@@ -49,22 +49,22 @@ codex_harness/
 
 ### Install into a Target Repository
 
-Use `scripts/adopt.py` to copy only the layer your target repository needs:
+Use `scripts/adopt.py install` to install the platform profile your target repository needs:
 
 ```bash
 cd harness-implementation-project-module3A
-python3 scripts/adopt.py /path/to/repo --profile thin
+python3 scripts/adopt.py install /path/to/repo --profile codex
+python3 scripts/adopt.py install /path/to/repo --profile claude
 ```
 
 Adoption profiles:
 
 | Profile | Description |
 |---------|-------------|
-| **thin** | Portable entry files, core controller, hooks, schemas, templates, essential docs, minimal skills |
-| **controlled** | thin + tests, CI example, full lifecycle skill set |
-| **codex** | controlled + Codex platform adapter |
-| **claude** | controlled + Claude Code platform adapter |
-| **full** | All default runtime examples |
+| **codex** | Common harness runtime + `AGENTS.md`, `.codex` |
+| **claude** | Common harness runtime + `CLAUDE.md`, `.claude` |
+
+Installation is incremental: existing target files are kept or appended, not replaced. Installed harness-owned paths are added to `.gitignore` so they stay local to the target repository.
 
 ### Quick Workflow
 

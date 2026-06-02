@@ -771,7 +771,7 @@ class HarnessCtlTests(unittest.TestCase):
 
         canonical = sorted(p.name for p in (PROJECT_ROOT / "skills").glob("harness-*"))
         self.assertTrue(canonical)
-        for base in [PROJECT_ROOT / ".agents" / "skills", PROJECT_ROOT / ".claude" / "skills"]:
+        for base in [PROJECT_ROOT / ".agents" / "skills", PROJECT_ROOT / ".codex" / "skills", PROJECT_ROOT / ".claude" / "skills"]:
             self.assertEqual(canonical, sorted(p.name for p in base.glob("harness-*")))
             for skill in canonical:
                 text = (base / skill / "SKILL.md").read_text(encoding="utf-8")
@@ -784,77 +784,83 @@ class HarnessCtlTests(unittest.TestCase):
     def test_adopt_profiles_copy_expected_layers(self):
         def adopt(profile):
             target = Path(tempfile.mkdtemp(prefix=f"harness-adopt-{profile}-"))
-            proc = subprocess.run([sys.executable, str(PROJECT_ROOT / "scripts" / "adopt.py"), str(target), "--profile", profile], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=30)
+            subprocess.run(["git", "init"], cwd=target, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=10)
+            proc = subprocess.run([sys.executable, str(PROJECT_ROOT / "scripts" / "adopt.py"), "install", str(target), "--profile", profile], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=30)
             return target, proc
 
         targets = []
         try:
-            thin, thin_proc = adopt("thin")
-            targets.append(thin)
-            self.assertIn("profile=thin", thin_proc.stdout)
-            self.assertTrue((thin / "AGENTS.md").exists())
-            self.assertTrue((thin / "CLAUDE.md").exists())
-            agents_text = (thin / "AGENTS.md").read_text(encoding="utf-8")
-            claude_text = (thin / "CLAUDE.md").read_text(encoding="utf-8")
-            self.assertIn("Clarify Before Spec", agents_text)
-            self.assertIn(".harness/config.json", agents_text)
-            self.assertIn(".harness/current", agents_text)
-            self.assertIn(".harness/config.json", claude_text)
-            self.assertIn(".harness/current", claude_text)
-            self.assertNotIn("portable coding-agent harness implementation", agents_text)
-            self.assertTrue((thin / "docs" / "harness" / "README.md").exists())
-            self.assertTrue((thin / "docs" / "harness" / "workflow.md").exists())
-            self.assertTrue((thin / "docs" / "harness" / "risk-gates.md").exists())
-            self.assertFalse((thin / "docs" / "harness" / "platform-adapters.md").exists())
-            self.assertFalse((thin / "docs" / "harness" / "mechanism-registry.yaml").exists())
-            self.assertFalse((thin / "docs" / "harness" / "evaluation").exists())
-            self.assertFalse((thin / "docs" / "harness" / "adoption-guide.md").exists())
-            self.assertFalse((thin / "docs" / "harness" / "source-analysis.md").exists())
-            self.assertTrue((thin / "harness" / "cli" / "harnessctl.py").exists())
-            self.assertTrue((thin / "skills" / "harness-clarify" / "SKILL.md").exists())
-            self.assertTrue((thin / "skills" / "harness-review" / "SKILL.md").exists())
-            self.assertTrue((thin / "skills" / "harness-github" / "SKILL.md").exists())
-            self.assertFalse((thin / ".codex").exists())
-            self.assertFalse((thin / ".claude").exists())
-
-            controlled, _ = adopt("controlled")
-            targets.append(controlled)
-            self.assertTrue((controlled / "harness" / "tests" / "test_harnessctl.py").exists())
-            self.assertTrue((controlled / ".github" / "workflows" / "harness-checks.yml").exists())
-            self.assertFalse((controlled / "docs" / "harness" / "platform-adapters.md").exists())
-            self.assertFalse((controlled / "docs" / "harness" / "mechanism-registry.yaml").exists())
-            self.assertFalse((controlled / "docs" / "harness" / "evaluation").exists())
-            self.assertFalse((controlled / "docs" / "harness" / "adoption-guide.md").exists())
-            self.assertTrue((controlled / "skills" / "harness-review" / "SKILL.md").exists())
-            self.assertTrue((controlled / "skills" / "harness-spec" / "SKILL.md").exists())
-            self.assertFalse((controlled / ".codex").exists())
-            self.assertFalse((controlled / ".claude").exists())
-
             codex, codex_proc = adopt("codex")
             targets.append(codex)
-            self.assertIn("platform adapter", codex_proc.stdout)
+            self.assertIn("profile=codex", codex_proc.stdout)
+            self.assertIn("mode=incremental", codex_proc.stdout)
+            self.assertIn("PASS\tcontroller cli", codex_proc.stdout)
+            self.assertIn("PASS\tskills", codex_proc.stdout)
+            self.assertTrue((codex / "AGENTS.md").exists())
+            agents_text = (codex / "AGENTS.md").read_text(encoding="utf-8")
+            self.assertIn("BEGIN CODING AGENT HARNESS", agents_text)
+            self.assertIn("Clarify Before Spec", agents_text)
+            self.assertTrue((codex / "docs" / "harness" / "README.md").exists())
+            self.assertTrue((codex / "harness" / "cli" / "harnessctl.py").exists())
+            self.assertTrue((codex / "harness" / "tests" / "test_harnessctl.py").exists())
             self.assertTrue((codex / ".codex" / "agents" / "worker.toml").exists())
-            self.assertTrue((codex / ".agents" / "skills" / "harness-review" / "SKILL.md").exists())
+            self.assertTrue((codex / ".codex" / "skills" / "harness-review" / "SKILL.md").exists())
+            self.assertFalse((codex / ".agents").exists())
+            self.assertFalse((codex / "skills").exists())
             self.assertTrue((codex / "docs" / "harness" / "platform-adapters.md").exists())
             self.assertFalse((codex / ".claude").exists())
+            self.assertEqual("codex", json.loads((codex / ".harness" / "config.json").read_text(encoding="utf-8"))["profile"])
+            gitignore = (codex / ".gitignore").read_text(encoding="utf-8")
+            for entry in [".harness/", "harness/", "docs/harness/", ".codex/", "AGENTS.md", ".github/workflows/harness-checks.yml", "Makefile"]:
+                self.assertIn(entry, gitignore)
 
             claude, claude_proc = adopt("claude")
             targets.append(claude)
-            self.assertIn("platform adapter", claude_proc.stdout)
+            self.assertIn("profile=claude", claude_proc.stdout)
+            self.assertTrue((claude / "CLAUDE.md").exists())
+            claude_text = (claude / "CLAUDE.md").read_text(encoding="utf-8")
+            self.assertIn("BEGIN CODING AGENT HARNESS", claude_text)
             self.assertTrue((claude / ".claude" / "settings.json").exists())
             self.assertTrue((claude / ".claude" / "skills" / "harness-review" / "SKILL.md").exists())
             self.assertTrue((claude / "docs" / "harness" / "platform-adapters.md").exists())
             self.assertFalse((claude / ".codex").exists())
+            self.assertFalse((claude / "skills").exists())
+            self.assertEqual("claude", json.loads((claude / ".harness" / "config.json").read_text(encoding="utf-8"))["profile"])
 
-            full, _ = adopt("full")
-            targets.append(full)
-            self.assertTrue((full / ".codex" / "agents" / "worker.toml").exists())
-            self.assertTrue((full / ".claude" / "settings.json").exists())
-            self.assertTrue((full / "skills" / "harness-github" / "SKILL.md").exists())
-            self.assertTrue((full / "examples").exists())
+            legacy = Path(tempfile.mkdtemp(prefix="harness-adopt-legacy-"))
+            targets.append(legacy)
+            subprocess.run(["git", "init"], cwd=legacy, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=10)
+            legacy_proc = subprocess.run([sys.executable, str(PROJECT_ROOT / "scripts" / "adopt.py"), str(legacy), "--profile", "codex", "--no-doctor"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=30)
+            self.assertIn("profile=codex", legacy_proc.stdout)
         finally:
             for target in targets:
                 shutil.rmtree(target, ignore_errors=True)
+
+    def test_install_is_incremental_for_existing_target_files(self):
+        target = Path(tempfile.mkdtemp(prefix="harness-install-incremental-"))
+        try:
+            subprocess.run(["git", "init"], cwd=target, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=10)
+            (target / ".gitignore").write_text("node_modules/\n", encoding="utf-8")
+            (target / "AGENTS.md").write_text("# Existing Agent Rules\n\nKeep this.\n", encoding="utf-8")
+            existing_config = target / ".codex" / "config.toml"
+            existing_config.parent.mkdir(parents=True)
+            existing_config.write_text("model = \"existing\"\n", encoding="utf-8")
+
+            proc = subprocess.run([sys.executable, str(PROJECT_ROOT / "scripts" / "adopt.py"), "install", str(target), "--profile", "codex", "--no-doctor"], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=30)
+            self.assertIn("kept existing .codex/config.toml", proc.stdout)
+            agents_text = (target / "AGENTS.md").read_text(encoding="utf-8")
+            self.assertIn("Existing Agent Rules", agents_text)
+            self.assertIn("BEGIN CODING AGENT HARNESS", agents_text)
+            self.assertEqual("model = \"existing\"\n", existing_config.read_text(encoding="utf-8"))
+            self.assertTrue((target / ".codex" / "skills" / "harness-review" / "SKILL.md").exists())
+            self.assertFalse((target / "skills").exists())
+            self.assertFalse((target / ".agents").exists())
+            gitignore = (target / ".gitignore").read_text(encoding="utf-8")
+            self.assertIn("node_modules/", gitignore)
+            for entry in [".harness/", "harness/", "docs/harness/", ".codex/", "AGENTS.md", ".github/workflows/harness-checks.yml", "Makefile"]:
+                self.assertIn(entry, gitignore)
+        finally:
+            shutil.rmtree(target, ignore_errors=True)
 
 
 if __name__ == "__main__":

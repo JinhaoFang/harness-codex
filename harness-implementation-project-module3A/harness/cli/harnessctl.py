@@ -832,6 +832,7 @@ def ensure_gitignore_entry(root: Path, entry: str) -> None:
 
 def init(args: argparse.Namespace) -> int:
     root = args.root
+    profile = getattr(args, "profile", "codex")
     for p in [active_dir(root), archive_dir(root), harness_dir(root) / "tmp"]:
         p.mkdir(parents=True, exist_ok=True)
     ensure_gitignore_entry(root, ".harness/")
@@ -839,7 +840,7 @@ def init(args: argparse.Namespace) -> int:
     if not config.exists():
         write_json(config, {
             "schema_version": "harness.config.v1",
-            "profile": "controlled",
+            "profile": profile,
             "created_at": now_iso(),
             "work_units_dir": ".harness/work-units",
             "default_required_gates": ["spec", "verification"],
@@ -851,7 +852,7 @@ def init(args: argparse.Namespace) -> int:
 
 def new(args: argparse.Namespace) -> int:
     root = args.root
-    init(argparse.Namespace(root=root))
+    init(argparse.Namespace(root=root, profile="codex"))
     wu_path = active_dir(root) / args.id
     if wu_path.exists():
         raise HarnessError(f"Work Unit already exists: {args.id}")
@@ -2043,14 +2044,18 @@ def parse_frontmatter(text: str) -> Dict[str, str]:
 def check_skills(root: Path) -> Tuple[str, List[str], List[str]]:
     blocking: List[str] = []
     warnings: List[str] = []
+    platform_dirs = [root / ".agents" / "skills", root / ".codex" / "skills", root / ".claude" / "skills"]
     canonical = root / "skills"
-    platform_dirs = [root / ".agents" / "skills", root / ".claude" / "skills"]
+    if not canonical.exists():
+        canonical = next((p for p in platform_dirs if p.exists()), canonical)
     skill_dirs = sorted(p for p in canonical.glob("harness-*") if (p / "SKILL.md").exists())
     if not skill_dirs:
-        blocking.append("No canonical harness skills found under skills/harness-*/SKILL.md.")
+        blocking.append("No harness skills found under skills/ or installed platform skills directories.")
         return "BLOCK", blocking, warnings
     canonical_names = [p.name for p in skill_dirs]
     for platform_dir in platform_dirs:
+        if not platform_dir.exists():
+            continue
         names = sorted(p.name for p in platform_dir.glob("harness-*") if (p / "SKILL.md").exists()) if platform_dir.exists() else []
         if names != canonical_names:
             blocking.append(f"Skill mirror mismatch for {platform_dir.relative_to(root)}: expected {canonical_names}, got {names}.")
@@ -2379,6 +2384,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     p = sub.add_parser("init")
+    p.add_argument("--profile", choices=["codex", "claude"], default="codex")
     p.set_defaults(func=init)
 
     p = sub.add_parser("new")

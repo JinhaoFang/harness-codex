@@ -52,14 +52,26 @@ mechanisms:
   - mechanism: skills-gate
     type: controller-check
     purpose: "Detect incomplete or unsynchronized skill content before skills are copied into Codex or Claude Code adapters."
-    failure_mode: "A skill names a workflow such as GitHub collaboration but omits required issue, commit, PR, evidence, or review structure."
-    protected_invariant: "Context routing stays useful; skills do not become vague or unsafe lifecycle authority."
+    failure_mode: "A skill names a workflow such as GitHub collaboration but omits required issue, commit, PR, evidence, review structure, or a platform skill mirror."
+    protected_invariant: "Context routing stays useful; skills do not become vague or unsafe lifecycle authority; installed platform skill mirrors match the canonical catalog."
     validation_method: "harnessctl check --gate skills --strict and harness/tests/test_harnessctl.py."
     known_cost: "Small phrase-level validator that must be updated when the curated skill catalog changes."
     owner: "platform-owner"
     introduced_at: "2026-05-28"
-    last_reviewed: "2026-05-28"
+    last_reviewed: "2026-06-02"
     removal_condition: "Remove or replace if platform-native skill validation covers completeness, trigger scope, and mirror consistency."
+    status: active
+  - mechanism: adoption-installer
+    type: workflow
+    purpose: "Install the harness into target repositories with one command while preserving existing repository instructions, ignore rules, skills, and platform config."
+    failure_mode: "Multi-profile copy flows confuse users, blind replacement damages existing AGENTS/CLAUDE/platform config, install leaves .harness uninitialized, or harness files are accidentally committed to the target repo."
+    protected_invariant: "Adoption is incremental and platform-specific: codex installs Codex surfaces, claude installs Claude surfaces, common runtime is initialized once, and installed harness-owned paths are ignored locally."
+    validation_method: "harness/tests/test_harnessctl.py adoption install tests plus dry-run/manual installer smoke."
+    known_cost: "Installer has file-copy policy logic and must avoid becoming a complex merge engine."
+    owner: "platform-owner"
+    introduced_at: "2026-06-02"
+    last_reviewed: "2026-06-02"
+    removal_condition: "Replace if a packaged CLI installer provides the same incremental behavior with lower maintenance cost."
     status: active
   - mechanism: minimal-worker-reviewer-subagents
     type: reviewer

@@ -12,14 +12,12 @@ The implementation is intentionally **controller-light but invariant-heavy**:
 - handoff and state are generated from authoritative artifacts, not chat summaries;
 - every non-trivial mechanism has a purpose, validation method, cost, and removal condition.
 
-Use this project by copying the parts that match your repository profile:
+Use this project by installing the platform profile that matches your repository:
 
 | Target profile | Copy first | Add only when needed |
 |---|---|---|
-| Thin Local Harness | `AGENTS.md`, `CLAUDE.md`, `docs/harness/README.md`, `harness/cli/harnessctl.py`, selected skills | hooks, review agents |
-| Controlled Repo Harness | Thin + `.harness` lifecycle, evidence receipts, scope checks, close review workflow | CI gates, path policy |
-| Risk-Aware Harness | Controlled + waiver model, human gate, deny/ask permissions, boundary hooks | policy-as-code, security review |
-| Scaled Multi-Agent Harness | Risk-aware + issue/PR discipline, minimal worker/reviewer subagents, worktrees, HEB evaluation | scheduler/orchestrator |
+| Codex Harness | Common runtime + `AGENTS.md`, `.codex` | policy-as-code, protected branch gates |
+| Claude Harness | Common runtime + `CLAUDE.md`, `.claude` | policy-as-code, protected branch gates |
 
 ## Fast start
 
@@ -44,17 +42,14 @@ python3 harness/cli/harnessctl.py handoff --id WU-001 --next-safe-action "Open P
 
 ## Adoption profiles
 
-Use `scripts/adopt.py` to copy only the layer a target repository needs:
+Use `scripts/adopt.py install` to install the harness into a target repository:
 
 ```bash
-python3 scripts/adopt.py /path/to/repo --profile thin
-python3 scripts/adopt.py /path/to/repo --profile controlled
-python3 scripts/adopt.py /path/to/repo --profile codex
-python3 scripts/adopt.py /path/to/repo --profile claude
-python3 scripts/adopt.py /path/to/repo --profile full
+python3 scripts/adopt.py install /path/to/repo --profile codex
+python3 scripts/adopt.py install /path/to/repo --profile claude
 ```
 
-`thin` is the default and copies only the portable entry files, core controller, hooks, schemas, templates, essential runtime docs, and minimal skills. Package docs such as this adoption guide, source analysis, mechanism registry, and HEB evaluation cases are not copied into target repositories. `controlled` adds tests, CI example, and the full lifecycle skill set. `codex` and `claude` add platform adapters for those runtimes. `full` copies all default runtime examples. Platform adapter files should be merged with existing project configuration rather than overwritten blindly.
+The installer is incremental: existing files are kept, `AGENTS.md`/`CLAUDE.md` receive a marked harness block when already present, installed harness-owned paths are appended to `.gitignore`, and `.harness/config.json` is initialized only when missing. Package docs such as this adoption guide, source analysis, mechanism registry, and HEB evaluation cases are not copied into target repositories.
 
 ## What this project is not
 

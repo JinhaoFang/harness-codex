@@ -5,5 +5,5 @@ description = "Portable implementation scaffold for coding-agent project harness
 requires-python = ">=3.10"
 
 [tool.harness]
-profile = "controlled"
+profile = "codex"
 controller = "harness/cli/harnessctl.py"

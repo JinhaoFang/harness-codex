@@ -1,31 +1,28 @@
 # Adoption Guide
 
-## Step 1: Copy the thin layer
+## Step 1: Install the harness
 
-Default adoption copies the thin layer:
+Run the installer from the harness implementation package while pointing at the target repository:
 
 ```bash
-python3 scripts/adopt.py /path/to/repo --profile thin
+python3 scripts/adopt.py install /path/to/repo --profile codex
+python3 scripts/adopt.py install /path/to/repo --profile claude
 ```
 
 Profiles:
 
 | Profile | Copies | Use when |
 |---|---|---|
-| `thin` | entry files, essential runtime docs, controller, hooks, schemas, templates, clarify/evidence/handoff skills | first adoption or manual controller use |
-| `controlled` | thin + harness tests, CI example, full lifecycle skill set | repository wants Work Unit/evidence/review/CI discipline |
-| `codex` | controlled + `.agents/skills` and `.codex` examples | target repo uses Codex project skills/subagents/hooks |
-| `claude` | controlled + `.claude` examples | target repo uses Claude Code permissions/hooks/agents/skills |
-| `full` | all default examples | sandbox/evaluation repo, not blind production adoption |
+| `codex` | common harness runtime + `AGENTS.md`, `.codex` | target repo uses Codex project instructions, skills, subagents, or hooks |
+| `claude` | common harness runtime + `CLAUDE.md`, `.claude` | target repo uses Claude Code permissions, hooks, agents, or skills |
 
-Platform adapter files can conflict with existing project settings. Merge `.codex/`, `.claude/`, `.github/`, `AGENTS.md`, `CLAUDE.md`, and `Makefile` deliberately; use `--force` only after review.
+Installation is incremental. Existing target files are kept; `AGENTS.md` and `CLAUDE.md` receive a marked harness block instead of being replaced. Existing `.gitignore`, `.codex`, `.claude`, `.github`, and `Makefile` content is not removed. Installed harness-owned paths are appended to `.gitignore` because they are local harness files, not target-repository source.
 
 Implementation-package docs are intentionally not copied to target repositories. This excludes `docs/harness/evaluation/`, `docs/harness/adoption-guide.md`, `docs/harness/source-analysis.md`, and `docs/harness/mechanism-registry.yaml`. `docs/harness/platform-adapters.md` is copied only with platform profiles.
 
-Run:
+The installer also initializes `.harness/` runtime state and runs doctor unless `--no-doctor` is used. After install, run:
 
 ```bash
-python3 harness/cli/harnessctl.py init
 python3 harness/cli/harnessctl.py doctor
 python3 harness/cli/harnessctl.py validate --all --strict
 ```

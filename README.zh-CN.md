@@ -51,22 +51,22 @@ codex_harness/
 
 ### 安装到目标仓库
 
-使用 `scripts/adopt.py` 仅复制目标仓库需要的层级：
+使用 `scripts/adopt.py install` 安装目标仓库需要的平台配置：
 
 ```bash
 cd harness-implementation-project-module3A
-python3 scripts/adopt.py /path/to/repo --profile thin
+python3 scripts/adopt.py install /path/to/repo --profile codex
+python3 scripts/adopt.py install /path/to/repo --profile claude
 ```
 
 采用配置：
 
 | 配置 | 说明 |
 |------|------|
-| **thin** | 便携式入口文件、核心控制器、hooks、schemas、templates、核心文档、最小技能集 |
-| **controlled** | thin + 测试、CI 示例、完整生命周期技能集 |
-| **codex** | controlled + Codex 平台适配器 |
-| **claude** | controlled + Claude Code 平台适配器 |
-| **full** | 所有默认运行时示例 |
+| **codex** | 公共 harness runtime + `AGENTS.md`、`.codex` |
+| **claude** | 公共 harness runtime + `CLAUDE.md`、`.claude` |
+
+安装过程是增量的：目标仓库已有文件会被保留或追加 harness 区块，不会被替换。安装生成的 harness 路径会写入 `.gitignore`，保持为目标仓库本地文件。
 
 ### 快速工作流
 
