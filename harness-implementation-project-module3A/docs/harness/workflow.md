@@ -59,9 +59,11 @@ python3 harness/cli/harnessctl.py ci --strict
 
 ## 6. Review
 
-Plan review checks whether the execution plan is grounded in repository truth before implementation starts. Close review checks whether diff, evidence, scope, risk, and maintainability satisfy the Work Unit Contract before acceptance. Close-addendum review supplements a prior close review after evidence-only or lightweight acceptance changes. Publication review checks GitHub issue/PR/branch publication and does not replace implementation close review.
+Plan review checks whether the execution plan is grounded in repository truth before implementation starts. Close review checks whether implementation diff, scope, risk, and maintainability satisfy the Work Unit Contract before acceptance. Publication review checks GitHub issue/PR/branch publication and does not replace implementation close review. Close-addendum is exceptional: use it only when a lightweight acceptance judgment changed and a full close review would be excessive.
 
-For medium or higher risk, `running` requires a passing plan review or explicit self-check downgrade where allowed. For high or critical risk, use independent review or human gate. For medium or higher risk, the passing review set must cite the fresh evidence receipt IDs it relied on. A close-addendum or publication review may cite newly added receipts without forcing a full close review when implementation content is unchanged.
+Review validity is surface-based, not artifact-id based. The close review remains valid when the reviewed implementation diff is unchanged and there is no implementation, scope, risk, or success-criteria amendment. Evidence refresh, commit materialization, CI rerun, receipt ID changes, handoff/archive/state updates, `.harness/` runtime changes, and GitHub issue/PR metadata do not invalidate close review. Verification gate owns evidence freshness. Publication gate owns GitHub collaboration readiness. Review gate owns judgment validity.
+
+For medium or higher risk, `running` requires a passing plan review or explicit self-check downgrade where allowed. For high or critical risk, use independent review or human gate. For medium or higher risk, the passing review set must cite an evidence snapshot or receipt at least once, but review validity is not keyed by the latest receipt IDs or command log paths. Use `harnessctl finalize-check` to collect validate, verification, review, and workspace status before archive/handoff instead of manually interpreting multiple gates.
 
 On Codex, subagents are explicit. When a Work Unit requires reviewer or worker isolation, the main agent must start the reviewer/worker directly and wait for the result before continuing; do not rely on automatic delegation.
 
@@ -70,11 +72,14 @@ Gates:
 ```bash
 python3 harness/cli/harnessctl.py check --id <WU-ID> --gate plan-review --strict
 python3 harness/cli/harnessctl.py check --id <WU-ID> --gate review --strict
+python3 harness/cli/harnessctl.py finalize-check --id <WU-ID> --strict
 ```
+
+`finalize-check` is an action-level closer. It reports `review_required`, `rerun_evidence_required`, `do_not_request_review`, `forbidden_next_actions`, and `surfaces`. When implementation diff is unchanged, equivalent evidence is `equivalent_pass`, not a warning. Agents must follow these action fields rather than infer new reviewer work from HEAD changes or receipt refreshes.
 
 ## 7. GitHub collaboration
 
-Use GitHub after the local task shape is grounded. Create issues, branches, commits, and PRs after the Work Unit is specified and the relevant plan review has passed. GitHub records collaboration state; it does not replace the contract, evidence receipts, review verdicts, waivers, or controller gates. If GitHub collaboration is added after implementation, record it as a `collaboration_only` amendment, add publication evidence, and use publication review instead of rerunning implementation review unless code/scope/risk changed.
+Use GitHub after the local task shape is grounded. Create issues, branches, commits, and PRs after the Work Unit is specified and the relevant plan review has passed. GitHub records collaboration state; it does not replace the contract, evidence receipts, review verdicts, waivers, or controller gates. If GitHub collaboration is added after implementation, record it as a `collaboration_only` amendment, add publication evidence, and use publication review instead of rerunning implementation review unless code/scope/risk changed. Do not ask for close-addendum merely because implementation evidence was refreshed after publication; verification gate owns evidence freshness.
 
 Do not keep a local Work Unit active only because a PR is waiting for merge. Once local implementation, evidence, close review, and PR/update publication are complete, archive the Work Unit locally with a no-next-step reason or handoff. If PR review or merge later requires changes, reopen the archived Work Unit or create a follow-up Work Unit with the new scope.
 

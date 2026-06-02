@@ -187,7 +187,7 @@ class HarnessCtlTests(unittest.TestCase):
             self.assertEqual(out["decision"], "block")
             self.assertIn("verification gate", out["reason"])
             self.assertIn("Next action:", out["reason"])
-            self.assertIn("record fresh claim-relative evidence", out["reason"])
+            self.assertIn("requires_rerun=true", out["reason"])
             self.assertNotIn("hookSpecificOutput", out)
 
             run(root, "new", "--id", "WU-STOP-REVIEW", "--title", "Stop Review", "--type", "bugfix", "--risk", "medium")
@@ -198,8 +198,8 @@ class HarnessCtlTests(unittest.TestCase):
             proc = subprocess.run([sys.executable, str(hook)], cwd=root, text=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
             out = json.loads(proc.stdout)
             self.assertEqual(out["decision"], "block")
-            self.assertIn("close review gate", out["reason"])
-            self.assertIn("start the reviewer subagent", out["reason"])
+            self.assertIn("review validity gate", out["reason"])
+            self.assertIn("minimal review type", out["reason"])
 
             with self.assertRaises(harnessctl.HarnessError) as ctx:
                 harnessctl.submit_review(argparse.Namespace(
@@ -319,7 +319,7 @@ class HarnessCtlTests(unittest.TestCase):
             run(root, "submit-review", "--id", "WU-REVIEW", "--mode", "close", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context")
             proc = run(root, "check", "--id", "WU-REVIEW", "--gate", "review", "--strict", check=False)
             self.assertEqual(proc.returncode, 2)
-            self.assertIn("must cite fresh evidence receipt IDs", proc.stdout)
+            self.assertIn("must cite an evidence snapshot or receipt ID at least once", proc.stdout)
 
             run(root, "submit-review", "--id", "WU-REVIEW", "--mode", "close", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context", "--evidence-ref", receipt_id)
             proc = run(root, "check", "--id", "WU-REVIEW", "--gate", "review", "--strict")
@@ -348,21 +348,20 @@ class HarnessCtlTests(unittest.TestCase):
             subprocess.run(["git", "add", "src/app.py"], cwd=root, check=True, timeout=10)
             subprocess.run(["git", "commit", "-m", "feat: implement work unit"], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=10)
             proc = run(root, "check", "--id", "WU-LIFECYCLE", "--gate", "verification", "--strict")
-            self.assertIn('"decision": "WARN"', proc.stdout)
-            self.assertIn("implementation content is unchanged", proc.stdout)
+            self.assertIn('"decision": "PASS"', proc.stdout)
+            self.assertIn('"status": "equivalent_pass"', proc.stdout)
             proc = run(root, "check", "--id", "WU-LIFECYCLE", "--gate", "review", "--strict")
-            self.assertIn('"decision": "WARN"', proc.stdout)
-            self.assertIn("implementation content is unchanged", proc.stdout)
+            self.assertIn('"decision": "PASS"', proc.stdout)
 
             run(root, "handoff", "--id", "WU-LIFECYCLE", "--next-safe-action", "Archive after merge.")
             subprocess.run(["git", "add", "-f", ".harness/work-units/active/WU-LIFECYCLE"], cwd=root, check=True, timeout=10)
             subprocess.run(["git", "commit", "-m", "chore: record work unit handoff"], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=10)
 
             proc = run(root, "check", "--id", "WU-LIFECYCLE", "--gate", "verification", "--strict")
-            self.assertIn('"decision": "WARN"', proc.stdout)
-            self.assertIn("implementation content is unchanged", proc.stdout)
+            self.assertIn('"decision": "PASS"', proc.stdout)
+            self.assertIn('"status": "equivalent_pass"', proc.stdout)
             proc = run(root, "check", "--id", "WU-LIFECYCLE", "--gate", "review", "--strict")
-            self.assertIn('"decision": "WARN"', proc.stdout)
+            self.assertIn('"decision": "PASS"', proc.stdout)
 
             hook = root / "harness" / "hooks" / "stop_without_evidence.py"
             proc = subprocess.run([sys.executable, str(hook)], cwd=root, text=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
@@ -475,8 +474,9 @@ class HarnessCtlTests(unittest.TestCase):
             self.assertIn("user_confirmed", proc.stdout)
 
             contract.write_text(contract.read_text(encoding="utf-8").replace("user_confirmed: no", "user_confirmed: yes").replace("project_reality_confidence: 95", "project_reality_confidence: 90"), encoding="utf-8")
-            proc = run(root, "check", "--id", "WU-CLARIFY", "--gate", "spec", "--strict", check=False)
-            self.assertEqual(proc.returncode, 2)
+            proc = run(root, "check", "--id", "WU-CLARIFY", "--gate", "spec", "--strict")
+            self.assertEqual(proc.returncode, 0)
+            self.assertIn('"decision": "WARN"', proc.stdout)
             self.assertIn("project_reality_confidence", proc.stdout)
 
             contract.write_text(contract.read_text(encoding="utf-8").replace("project_reality_confidence: 90", "project_reality_confidence: 95"), encoding="utf-8")
@@ -544,6 +544,25 @@ class HarnessCtlTests(unittest.TestCase):
             items = harnessctl.required_evidence_items(root / ".harness" / "work-units" / "active" / "WU-NESTED")
             self.assertEqual(items[0]["claim"], "Targeted test passes.")
             self.assertEqual(items[0]["command"], "python3 -m unittest")
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_spec_gate_accepts_natural_language_clarification_record(self):
+        root = make_repo()
+        try:
+            run(root, "init")
+            run(root, "new", "--id", "WU-CLARIFY-NL", "--title", "Clarify Natural", "--type", "bugfix", "--risk", "medium")
+            fill_contract(root, "WU-CLARIFY-NL")
+            contract = root / ".harness" / "work-units" / "active" / "WU-CLARIFY-NL" / "contract.md"
+            text = contract.read_text(encoding="utf-8")
+            text = text.replace("## Clarification record", "## Clarification Record")
+            text = text.replace("- user_confirmed: yes", "- user_confirmed: yes, 2026-06-01: user confirmed the bounded behavior.")
+            text = text.replace("- repo_grounded: yes", "- repo_grounded: yes, inspected current tests and source paths.")
+            text = text.replace("- remaining_assumptions: none", "- remaining_assumptions: none; current repo conventions are sufficient.")
+            contract.write_text(text, encoding="utf-8")
+
+            proc = run(root, "check", "--id", "WU-CLARIFY-NL", "--gate", "spec", "--strict")
+            self.assertIn('"decision": "PASS"', proc.stdout)
         finally:
             shutil.rmtree(root, ignore_errors=True)
 
@@ -669,8 +688,54 @@ class HarnessCtlTests(unittest.TestCase):
             ev7 = json.loads(run(root, "evidence", "--id", "WU-PUB", "--claim", "EV7", "--type", "manual", "--result", "pass", "--command", "gh issue view 7 --json number,title,state,url,body", "--artifact-uri", "https://github.com/example/repo/issues/7").stdout)["receipt_id"]
             run(root, "submit-review", "--id", "WU-PUB", "--mode", "publication", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context", "--evidence-ref", ev7)
             proc = run(root, "check", "--id", "WU-PUB", "--gate", "review", "--strict")
-            self.assertIn('"decision": "WARN"', proc.stdout)
-            self.assertIn("supplemental review covers", proc.stdout)
+            self.assertIn('"decision": "PASS"', proc.stdout)
+
+            # Refreshing existing implementation evidence after publication must not force
+            # another reviewer/addendum run when implementation/scope/risk did not change.
+            ev1_refreshed = json.loads(run(root, "evidence", "--id", "WU-PUB", "--claim", "EV1", "--type", "test", "--result", "pass", "--command", "true", "--command-log-ref", ".harness/work-units/active/WU-PUB/evidence/artifacts/ev1-refreshed.log").stdout)["receipt_id"]
+            self.assertNotEqual(ev1, ev1_refreshed)
+            proc = run(root, "check", "--id", "WU-PUB", "--gate", "verification", "--strict")
+            self.assertIn('"decision": "PASS"', proc.stdout)
+            proc = run(root, "check", "--id", "WU-PUB", "--gate", "review", "--strict")
+            self.assertIn('"decision": "PASS"', proc.stdout)
+            self.assertNotIn("does not cite latest fresh receipt", proc.stdout)
+            self.assertNotIn("cites earlier receipt", proc.stdout)
+        finally:
+            shutil.rmtree(root, ignore_errors=True)
+
+    def test_commit_and_receipt_refresh_do_not_require_close_addendum(self):
+        root = make_repo()
+        try:
+            run(root, "init")
+            run(root, "new", "--id", "WU-NO-ADDENDUM", "--title", "No Addendum", "--type", "bugfix", "--risk", "medium")
+            fill_contract(root, "WU-NO-ADDENDUM")
+            (root / "src").mkdir()
+            (root / "src" / "app.py").write_text("value = 1\n", encoding="utf-8")
+            ev1 = json.loads(run(root, "evidence", "--id", "WU-NO-ADDENDUM", "--claim", "EV1", "--type", "test", "--result", "pass", "--command", "true", "--command-log-ref", ".harness/work-units/active/WU-NO-ADDENDUM/evidence/artifacts/ev1.log").stdout)["receipt_id"]
+            run(root, "submit-review", "--id", "WU-NO-ADDENDUM", "--mode", "close", "--decision", "PASS", "--reviewer-role", "reviewer-agent", "--builder-role", "agent", "--independence-level", "fresh_context", "--evidence-ref", ev1)
+
+            subprocess.run(["git", "add", "src/app.py"], cwd=root, check=True, timeout=10)
+            subprocess.run(["git", "commit", "-m", "feat: materialize reviewed diff"], cwd=root, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True, timeout=10)
+
+            ev1_refreshed = json.loads(run(root, "evidence", "--id", "WU-NO-ADDENDUM", "--claim", "EV1", "--type", "test", "--result", "pass", "--command", "true", "--command-log-ref", ".harness/work-units/active/WU-NO-ADDENDUM/evidence/artifacts/ev1-r2.log").stdout)["receipt_id"]
+            self.assertNotEqual(ev1, ev1_refreshed)
+
+            proc = run(root, "check", "--id", "WU-NO-ADDENDUM", "--gate", "review", "--strict")
+            self.assertIn('"decision": "PASS"', proc.stdout)
+            self.assertNotIn("verification owns freshness", proc.stdout)
+            self.assertNotIn("does not cite latest fresh receipt", proc.stdout)
+
+            proc = run(root, "request-review", "--id", "WU-NO-ADDENDUM", "--mode", "close-addendum", "--reviewer-role", "reviewer-agent", check=False)
+            self.assertEqual(proc.returncode, 2)
+            self.assertIn("Close-addendum is not required", proc.stderr)
+
+            out = json.loads(run(root, "finalize-check", "--id", "WU-NO-ADDENDUM", "--strict").stdout)
+            self.assertTrue(out["do_not_request_review"])
+            self.assertIn(out["decision"], {"PASS", "WARN"})
+
+            hook = root / "harness" / "hooks" / "stop_without_evidence.py"
+            proc = subprocess.run([sys.executable, str(hook)], cwd=root, text=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            self.assertEqual(proc.stdout, "")
         finally:
             shutil.rmtree(root, ignore_errors=True)
 

@@ -379,9 +379,9 @@ def parse_yaml_header(text: str) -> Dict[str, str]:
 def get_section_lines(text: str, heading: str) -> List[str]:
     lines = text.splitlines()
     start = None
-    target = heading.strip().lower()
+    target = normalize_heading(heading)
     for i, line in enumerate(lines):
-        if line.strip().lower() == target:
+        if normalize_heading(line) == target:
             start = i + 1
             break
     if start is None:
@@ -392,6 +392,18 @@ def get_section_lines(text: str, heading: str) -> List[str]:
             break
         out.append(line)
     return out
+
+
+def normalize_heading(value: str) -> str:
+    text = value.strip().lower()
+    text = re.sub(r"^#+\s*", "", text)
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return " ".join(text.split())
+
+
+def has_heading(text: str, heading: str) -> bool:
+    target = normalize_heading(heading)
+    return any(normalize_heading(line) == target for line in text.splitlines())
 
 
 def bullets_after_subheading(text: str, subheading: str) -> List[str]:
@@ -482,7 +494,11 @@ def glob_matches(path: str, patterns: Iterable[str]) -> bool:
 def parse_bool(value: Any) -> bool:
     if isinstance(value, bool):
         return value
-    return str(value).strip().lower() in {"true", "yes", "1", "required", "confirmed"}
+    text = str(value).strip().lower()
+    if text in {"true", "yes", "1", "required", "confirmed"}:
+        return True
+    first = re.split(r"[\s,;:.]+", text, 1)[0]
+    return first in {"true", "yes", "1", "required", "confirmed"}
 
 
 def parse_percent(value: Any) -> Optional[float]:
@@ -521,7 +537,7 @@ def section_key_values(text: str, heading: str) -> Dict[str, str]:
 def check_clarification_record(text: str, non_trivial: bool) -> Tuple[List[str], List[str]]:
     blocking: List[str] = []
     warnings: List[str] = []
-    if "## Clarification record" not in text:
+    if not has_heading(text, "## Clarification record"):
         msg = "Missing heading: ## Clarification record. Open questions alone do not prove clarify happened."
         if non_trivial:
             blocking.append(msg)
@@ -542,16 +558,13 @@ def check_clarification_record(text: str, non_trivial: bool) -> Tuple[List[str],
                 warnings.append(message)
 
     confidence_requirements = {
-        "user_intent_confidence": "user_intent_confidence must be at least 95 before locking non-trivial work.",
-        "project_reality_confidence": "project_reality_confidence must be at least 95 before locking non-trivial work.",
+        "user_intent_confidence": "user_intent_confidence is below 95; record unresolved intent risk if this matters.",
+        "project_reality_confidence": "project_reality_confidence is below 95; record unresolved repo-grounding risk if this matters.",
     }
     for key, message in confidence_requirements.items():
         score = parse_percent(values.get(key, ""))
         if score is None or score < 95:
-            if non_trivial:
-                blocking.append(message)
-            else:
-                warnings.append(message)
+            warnings.append(message)
 
     assumptions = values.get("remaining_assumptions", "")
     if not assumptions:
@@ -560,7 +573,7 @@ def check_clarification_record(text: str, non_trivial: bool) -> Tuple[List[str],
             blocking.append(msg)
         else:
             warnings.append(msg)
-    elif not (is_empty_marker(assumptions) or assumptions.lower().startswith("accepted:")):
+    elif not assumption_value_resolved(assumptions):
         msg = "remaining_assumptions must be none/resolved or explicitly accepted; unresolved assumptions block spec lock."
         if non_trivial:
             blocking.append(msg)
@@ -570,6 +583,13 @@ def check_clarification_record(text: str, non_trivial: bool) -> Tuple[List[str],
     if not values.get("key_decisions") or is_empty_marker(values.get("key_decisions", "")):
         warnings.append("Clarification record has no key_decisions. Record at least one decision or why none were needed.")
     return blocking, warnings
+
+
+def assumption_value_resolved(value: str) -> bool:
+    text = value.strip().lower()
+    if is_empty_marker(text):
+        return True
+    return text.startswith(("none", "resolved", "accepted:", "accepted ", "no material", "no remaining"))
 
 
 def required_evidence_items(wu_path: Path) -> List[Dict[str, Any]]:
@@ -699,11 +719,95 @@ def latest_pass_for_claim(wu_path: Path, work_unit_id: str, claim_ref: str) -> O
     return sorted(passes, key=lambda r: r.get("ended_at", ""))[-1]
 
 
+def receipts_by_id(wu_path: Path, work_unit_id: str) -> Dict[str, Dict[str, Any]]:
+    out: Dict[str, Dict[str, Any]] = {}
+    for receipt in evidence_receipts(wu_path, work_unit_id):
+        rid = str(receipt.get("receipt_id", "")).strip()
+        if rid:
+            out[rid] = receipt
+    return out
+
+
+def cited_receipts_by_claim(wu_path: Path, work_unit_id: str, evidence_refs: set[str]) -> Dict[str, List[Dict[str, Any]]]:
+    by_id = receipts_by_id(wu_path, work_unit_id)
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for rid in evidence_refs:
+        receipt = by_id.get(rid)
+        if not receipt or receipt.get("result") != "pass":
+            continue
+        claim = str(receipt.get("claim_ref", "")).strip()
+        if claim:
+            out.setdefault(claim, []).append(receipt)
+    return out
+
+
 def receipt_has_reviewable_support(receipt: Dict[str, Any]) -> bool:
     if receipt.get("artifact_uri") or receipt.get("command_log_ref") or receipt.get("manual_artifact_ref"):
         return True
     command = str(receipt.get("command", "")).strip()
     return bool(command)
+
+
+def receipt_review_surface(receipt: Dict[str, Any]) -> str:
+    """Classify the review surface a receipt belongs to.
+
+    This is intentionally conservative and local. Publication/collaboration evidence
+    is not implementation evidence, and refreshing an implementation receipt does
+    not by itself create a new review judgment.
+    """
+    text = " ".join(
+        str(receipt.get(key, ""))
+        for key in ("type", "command", "artifact_uri", "manual_artifact_ref", "note", "verification_scope")
+    ).lower()
+    if any(token in text for token in ("gh issue", "gh pr", "github", "pull request", "issue view", "pr view")):
+        return "publication"
+    if "publication" in text or "collaboration" in text:
+        return "publication"
+    if str(receipt.get("type", "")).strip().lower() == "manual" and str(receipt.get("artifact_uri", "")).startswith("http"):
+        return "publication"
+    return "implementation"
+
+
+def amendment_impacts_after(wu_path: Path, timestamp: str = "") -> List[Dict[str, Any]]:
+    amendments = read_jsonl(amendments_path(wu_path))
+    if not timestamp:
+        return amendments
+    return [a for a in amendments if str(a.get("created_at", "")) >= timestamp]
+
+
+def amendment_affects_judgment(amendment: Dict[str, Any]) -> bool:
+    """Return true when an amendment invalidates an existing close judgment.
+
+    Evidence refreshes, publication/collaboration metadata, context pointers,
+    state/handoff, and harness runtime changes should not make a close review
+    stale. Success criteria, scope, risk, or implementation changes should.
+    """
+    impact = str(amendment.get("impact") or "").strip()
+    if impact in {"implementation", "scope_or_risk", "success_criteria"}:
+        return True
+    if amendment_affects_implementation(amendment):
+        return True
+    field = str(amendment.get("field", "")).strip()
+    if field in {"intent", "scope", "risk", "success", "stop_conditions"}:
+        return True
+    return False
+
+
+def review_implementation_hash(verdict: Dict[str, Any], wu_path: Path, work_unit_id: str) -> str:
+    explicit = str(verdict.get("reviewed_implementation_diff_hash", "")).strip()
+    if explicit:
+        return explicit
+    by_id = receipts_by_id(wu_path, work_unit_id)
+    hashes = []
+    for rid in verdict.get("evidence_refs", []) or []:
+        receipt = by_id.get(str(rid).strip())
+        if not receipt:
+            continue
+        value = str(receipt.get("implementation_diff_hash", "")).strip()
+        if value:
+            hashes.append(value)
+    unique = sorted(set(hashes))
+    return unique[0] if len(unique) == 1 else ""
 
 
 def review_verdicts(wu_path: Path) -> List[Dict[str, Any]]:
@@ -1020,7 +1124,7 @@ def amend(args: argparse.Namespace) -> int:
         elif impact == "collaboration_only":
             next_action = "Record collaboration/publication evidence; plan re-review is not required unless implementation scope changed."
         elif impact == "evidence_only":
-            next_action = "Record only the new or stale evidence claims; use close-addendum review instead of full close review when implementation is unchanged."
+            next_action = "Record only the new or stale evidence claims. Do not request close-addendum unless the amendment changes acceptance judgment."
         else:
             next_action = "Lock and continue; latest amendment declares no plan/review impact."
         state = update_state(root, wu_path, status="specified", contract_locked=True, contract_lock_hash=contract_hash(wu_path), last_amendment_at=amendment["created_at"], next_safe_action=next_action)
@@ -1121,6 +1225,12 @@ def waiver(args: argparse.Namespace) -> int:
 def request_review(args: argparse.Namespace) -> int:
     root = args.root
     work_unit_id, wu_path = resolve_wu(root, args.id)
+    if args.mode == "close-addendum":
+        decision, blocking, warnings = check_review(root, wu_path)
+        if decision != "BLOCK":
+            raise HarnessError("Close-addendum is not required: review validity gate is not blocking. Receipt refresh, commit materialization, lifecycle updates, and publication metadata do not justify addendum by themselves.")
+        if not any("amendment" in x.lower() or "claim" in x.lower() or "contract" in x.lower() for x in blocking):
+            raise HarnessError("Close-addendum is not the correct next review. Use full close review, publication check, risk review, waiver, or fresh evidence according to review gate blocking reasons: " + "; ".join(blocking[:3]))
     request_id = "review-request-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:6]
     if args.mode == "plan":
         required_inputs = ["contract.md", "scope boundary", "risk notes", "context pointers", "proposed execution plan"]
@@ -1167,6 +1277,10 @@ def submit_review(args: argparse.Namespace) -> int:
         "reviewed_contract_ref": "contract.md",
         "reviewed_contract_hash": contract_hash(wu_path),
         "reviewed_diff_ref": "git diff",
+        "reviewed_head_commit": head_commit(root),
+        "reviewed_diff_hash": diff_hash(root, str(load_json(state_path(wu_path), {}).get("base_commit", ""))),
+        "reviewed_implementation_diff_hash": implementation_diff_hash(root, str(load_json(state_path(wu_path), {}).get("base_commit", ""))),
+        "reviewed_changed_files": work_unit_changed_files(root, str(load_json(state_path(wu_path), {}).get("base_commit", ""))),
         "evidence_refs": args.evidence_ref or [],
         "scope_check": {},
         "risk_check": {},
@@ -1345,16 +1459,17 @@ def verification_detail_report(root: Path, wu_path: Path) -> Tuple[List[Dict[str
             claim_blocking.append(f"Required evidence {ev_id} is skipped; skipped receipts cannot satisfy verification.")
 
         receipt_impl_diff = str(receipt.get("implementation_diff_hash") or "")
-        lifecycle_only_drift = receipt.get("diff_hash") != cur_diff and receipt_impl_diff and receipt_impl_diff == cur_impl_diff
-        if receipt.get("head_commit") != cur_head:
-            if lifecycle_only_drift:
-                claim_warnings.append(f"Evidence {ev_id} was recorded on an older HEAD, but implementation content is unchanged; only non-implementation context changed after evidence.")
-            else:
+        implementation_equivalent = bool(receipt_impl_diff and receipt_impl_diff == cur_impl_diff)
+        context_drift = receipt.get("head_commit") != cur_head or receipt.get("diff_hash") != cur_diff
+        # Commit materialization, receipt refresh, and lifecycle-only changes can move
+        # HEAD/full diff without changing the implementation surface. In that case,
+        # verification should accept documented implementation equivalence as a PASS,
+        # not a warning that nudges the agent to rerun evidence.
+        lifecycle_only_drift = context_drift and implementation_equivalent
+        if context_drift and not implementation_equivalent:
+            if receipt.get("head_commit") != cur_head:
                 claim_warnings.append(f"Evidence {ev_id} was recorded on a different HEAD. Confirm documented equivalence or rerun.")
-        if receipt.get("diff_hash") != cur_diff:
-            if lifecycle_only_drift:
-                claim_warnings.append(f"Evidence {ev_id} diff_hash changed, but implementation content is unchanged.")
-            else:
+            if receipt.get("diff_hash") != cur_diff:
                 claim_blocking.append(f"Evidence {ev_id} is stale: current diff hash differs from receipt diff_hash.")
 
         if not receipt_has_reviewable_support(receipt):
@@ -1372,13 +1487,21 @@ def verification_detail_report(root: Path, wu_path: Path) -> Tuple[List[Dict[str
                 "equivalence_possible": lifecycle_only_drift,
                 "minimal_next_action": f"Refresh or replace the receipt for {ev_id}; if evidence is impossible, create a scoped human-approved waiver.",
             })
+        elif lifecycle_only_drift:
+            detail.update({
+                "status": "equivalent_pass",
+                "reason": "Accepted by implementation-diff equivalence: HEAD/full diff changed, but implementation content for this Work Unit is unchanged.",
+                "requires_rerun": False,
+                "equivalence_possible": True,
+                "minimal_next_action": "No action for this claim; do not rerun evidence solely because HEAD or lifecycle artifacts changed.",
+            })
         elif claim_warnings:
             detail.update({
-                "status": "equivalent_warn" if lifecycle_only_drift else "warn",
+                "status": "warn",
                 "reason": "; ".join(claim_warnings),
                 "requires_rerun": False,
-                "equivalence_possible": lifecycle_only_drift,
-                "minimal_next_action": "No automatic rerun required if reviewer accepts documented equivalence; otherwise rerun targeted evidence.",
+                "equivalence_possible": False,
+                "minimal_next_action": "No automatic rerun required if documented equivalence is available; otherwise rerun targeted evidence.",
             })
         else:
             detail.update({
@@ -1429,9 +1552,15 @@ def check_review(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
         blocking.append(f"{risk} risk requires a passing close review verdict.")
         return "BLOCK", blocking, warnings
 
+    base_commit = str(state.get("base_commit", ""))
+    cur_head = head_commit(root)
+    cur_diff = diff_hash(root, base_commit)
+    cur_impl_diff = implementation_diff_hash(root, base_commit)
+    current_contract_hash = contract_hash(wu_path)
+
+    close_time = str(latest_close.get("created_at", "")) if latest_close else ""
     supplemental = []
     if latest_close:
-        close_time = str(latest_close.get("created_at", ""))
         supplemental = [
             v for v in all_passes
             if v.get("mode") in {"close-addendum", "publication"}
@@ -1439,17 +1568,30 @@ def check_review(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
         ]
     verdicts = close_verdicts + sorted(supplemental, key=lambda v: (v.get("created_at", ""), v.get("review_id", "")))
 
-    current_contract_hash = contract_hash(wu_path)
+    # Review validity is about the judgment surface, not latest receipt ids.
+    # The implementation judgment is still valid when the reviewed implementation
+    # diff is unchanged and no implementation/scope/risk/success amendment happened.
+    reviewed_impl_diff = review_implementation_hash(latest_close, wu_path, work_unit_id) if latest_close else ""
+    implementation_changed_since_review = bool(reviewed_impl_diff and reviewed_impl_diff != cur_impl_diff)
+    if implementation_changed_since_review:
+        blocking.append("Current implementation diff differs from the latest passing close review; run a full close review.")
+
+    amendments_after_close = amendment_impacts_after(wu_path, close_time) if latest_close else []
+    judgment_amendments = [a for a in amendments_after_close if amendment_affects_judgment(a)]
+    if judgment_amendments:
+        impacts = sorted(set(str(a.get("impact") or a.get("field") or "unknown") for a in judgment_amendments))
+        blocking.append("Judgment-affecting amendment after latest close review requires renewed review: " + ", ".join(impacts))
+
     if latest_close and str(latest_close.get("reviewed_contract_hash", "")) != current_contract_hash:
-        amendments = [a for a in read_jsonl(amendments_path(wu_path)) if a.get("contract_hash") == current_contract_hash]
-        affected_impl = any(amendment_affects_implementation(a) or amendment_requires_plan_review(a) for a in amendments)
-        current_supplement = [v for v in supplemental if str(v.get("reviewed_contract_hash", "")) == current_contract_hash]
-        if affected_impl:
-            blocking.append("Latest close review was for an older contract and later amendment may affect implementation/scope/risk; run a full close review.")
-        elif amendments and not current_supplement:
-            warnings.append("Latest close review was for an older contract. Implementation appears unchanged, but a close-addendum or publication review should cover the latest lightweight amendment.")
-        elif current_supplement:
-            warnings.append("Latest close review predates a lightweight amendment; supplemental review covers the current contract.")
+        current_amendments = [a for a in read_jsonl(amendments_path(wu_path)) if a.get("contract_hash") == current_contract_hash]
+        if not current_amendments:
+            blocking.append("Latest close review was for an older contract and no matching amendment record explains the current contract hash.")
+        elif any(amendment_affects_judgment(a) for a in current_amendments):
+            impacts = sorted(set(str(a.get("impact") or "judgment") for a in current_amendments if amendment_affects_judgment(a)))
+            blocking.append("Latest close review predates judgment-affecting contract amendment(s): " + ", ".join(impacts))
+        # Non-judgment amendments are handled by their own surface gates. They do
+        # not make the implementation close review stale and should not produce a
+        # warning that encourages a redundant addendum.
 
     if RISK_ORDER.get(risk, 1) >= 3:
         independent = [v for v in verdicts if v.get("mode") == "close" and (v.get("is_independent") or v.get("independence_level") == "human_gate")]
@@ -1460,39 +1602,70 @@ def check_review(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
             blocking.append("Builder-authored close review or close-addendum detected.")
 
     required = required_evidence_items(wu_path)
-    base_commit = str(state.get("base_commit", ""))
-    cur_head = head_commit(root)
-    cur_diff = diff_hash(root, base_commit)
-    cur_impl_diff = implementation_diff_hash(root, base_commit)
     combined_refs: set[str] = set()
+    publication_refs: set[str] = set()
     for v in verdicts:
-        combined_refs.update(str(x).strip() for x in v.get("evidence_refs", []) if str(x).strip())
+        refs = {str(x).strip() for x in v.get("evidence_refs", []) if str(x).strip()}
+        combined_refs.update(refs)
+        if v.get("mode") == "publication":
+            publication_refs.update(refs)
     if RISK_ORDER.get(risk, 1) >= 2 and not combined_refs:
-        blocking.append("Passing close review or supplemental review for medium+ risk must cite fresh evidence receipt IDs.")
+        blocking.append("Passing close review or supplemental review for medium+ risk must cite an evidence snapshot or receipt ID at least once.")
+
+    current_verification_details, verification_blocking, verification_warnings = verification_detail_report(root, wu_path)
+    current_verification = {str(x.get("claim", "")): x for x in current_verification_details}
+    if verification_blocking:
+        blocking.append("Verification gate is not satisfied; review gate cannot pass until evidence is fresh, equivalent, waived, or explicitly handled.")
+        for reason in verification_blocking:
+            blocking.append(reason)
+    elif verification_warnings:
+        for warning in verification_warnings:
+            warnings.append(warning)
+
+    cited_by_claim = cited_receipts_by_claim(wu_path, work_unit_id, combined_refs)
+    publication_cited_by_claim = cited_receipts_by_claim(wu_path, work_unit_id, publication_refs)
 
     for item in required:
         ev_id = str(item.get("id", "")).strip()
         receipt = latest_pass_for_claim(wu_path, work_unit_id, ev_id)
+        current_status = str(current_verification.get(ev_id, {}).get("status", ""))
+        current_satisfied = current_status in {"satisfied", "equivalent_pass", "equivalent_warn", "warn", "waived"}
         if receipt is None:
             if RISK_ORDER.get(risk, 1) >= 2:
-                blocking.append(f"Passing review set has no pass receipt for required claim {ev_id}.")
+                blocking.append(f"No pass receipt exists for required claim {ev_id}.")
             else:
-                warnings.append(f"Passing review set has no pass receipt for required claim {ev_id}.")
+                warnings.append(f"No pass receipt exists for required claim {ev_id}.")
             continue
-        rid = str(receipt.get("receipt_id", ""))
-        receipt_impl_diff = str(receipt.get("implementation_diff_hash") or "")
-        lifecycle_only_drift = receipt.get("diff_hash") != cur_diff and receipt_impl_diff and receipt_impl_diff == cur_impl_diff
-        if receipt.get("head_commit") != cur_head or receipt.get("diff_hash") != cur_diff:
-            if lifecycle_only_drift:
-                warnings.append(f"Close review cites evidence {ev_id} from an older HEAD, but implementation content is unchanged; only non-implementation context changed after review.")
-            else:
-                blocking.append(f"Close review cites stale evidence context for {ev_id}; rerun verification before passing review.")
-        if combined_refs and rid not in combined_refs:
-            msg = f"Passing review set does not cite latest fresh receipt {rid} for required claim {ev_id}."
-            if RISK_ORDER.get(risk, 1) >= 2:
-                blocking.append(msg)
-            else:
-                warnings.append(msg)
+
+        if cited_by_claim.get(ev_id):
+            # Review validity is surface-based. A close review may cite an earlier
+            # receipt for the same claim; current freshness/equivalence is owned by
+            # verification_detail_report, not by receipt-id chasing in review gate.
+            continue
+
+        # If a claim is publication/collaboration evidence, the publication surface
+        # owns it. It should not force implementation close review/addendum.
+        surface = receipt_review_surface(receipt)
+        if surface == "publication":
+            if publication_cited_by_claim.get(ev_id):
+                continue
+            blocking.append(f"Publication claim {ev_id} has pass evidence but no passing publication review/check cites it.")
+            continue
+
+        if current_satisfied:
+            # Medium+ close reviews must cite evidence at least once, but they do
+            # not need to cite every refreshed receipt or every verification claim.
+            # Missing per-claim citations are audit gaps, not judgment invalidation,
+            # when implementation/scope/risk/acceptance surfaces are unchanged.
+            continue
+
+        if RISK_ORDER.get(risk, 1) >= 2:
+            blocking.append(f"Required claim {ev_id} is not currently satisfied by verification.")
+        else:
+            warnings.append(f"Required claim {ev_id} is not currently satisfied by verification.")
+
+    if not blocking and latest_close and not reviewed_impl_diff:
+        warnings.append("Latest close review has no reviewed_implementation_diff_hash; falling back to evidence refs and contract checks.")
 
     return ("BLOCK" if blocking else "WARN" if warnings else "PASS"), blocking, warnings
 
@@ -1909,6 +2082,132 @@ def check_skills(root: Path) -> Tuple[str, List[str], List[str]]:
     return ("BLOCK" if blocking else "WARN" if warnings else "PASS"), blocking, warnings
 
 
+def workspace_clean(root: Path) -> bool:
+    return run_git(root, ["status", "--short"], "") == ""
+
+
+def review_required_from_blocking(review_blocking: List[str]) -> Tuple[bool, List[str]]:
+    review_reasons: List[str] = []
+    for reason in review_blocking:
+        lowered = reason.lower()
+        if any(token in lowered for token in (
+            "current implementation diff differs",
+            "judgment-affecting amendment",
+            "older contract",
+            "requires a passing close review",
+            "independent close review",
+            "human gate",
+            "builder-authored close review",
+        )):
+            review_reasons.append(reason)
+    return bool(review_reasons), review_reasons
+
+
+def finalize_surfaces(root: Path, wu_path: Path, gate_results: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    state = load_json(state_path(wu_path), {})
+    work_unit_id = str(state.get("work_unit_id") or wu_path.name)
+    verdicts = [v for v in review_verdicts(wu_path) if v.get("mode") == "close" and v.get("decision") in PASS_DECISIONS]
+    latest_close = sorted(verdicts, key=lambda v: (v.get("created_at", ""), v.get("review_id", "")))[-1] if verdicts else None
+    base_commit = str(state.get("base_commit", ""))
+    cur_impl = implementation_diff_hash(root, base_commit)
+    reviewed_impl = review_implementation_hash(latest_close, wu_path, work_unit_id) if latest_close else ""
+    verification_details, _b, _w = verification_detail_report(root, wu_path)
+    statuses = [str(d.get("status", "")) for d in verification_details]
+    equivalent_claims = [d.get("claim") for d in verification_details if d.get("status") == "equivalent_pass"]
+    review_required, review_reasons = review_required_from_blocking(gate_results.get("review", {}).get("blocking_reasons", []))
+    publication_required = any("publication claim" in x.lower() for x in gate_results.get("review", {}).get("blocking_reasons", []))
+    rerun_evidence_required = any(bool(d.get("requires_rerun")) for d in verification_details)
+    if gate_results.get("verification", {}).get("decision") == "PASS" and equivalent_claims:
+        evidence_state = "accepted_by_implementation_equivalence"
+    elif gate_results.get("verification", {}).get("decision") == "PASS":
+        evidence_state = "fresh_pass"
+    elif rerun_evidence_required:
+        evidence_state = "rerun_required"
+    else:
+        evidence_state = "blocked_or_warn"
+    if latest_close and reviewed_impl and reviewed_impl == cur_impl:
+        implementation_state = "unchanged_since_close_review"
+    elif latest_close and reviewed_impl:
+        implementation_state = "changed_since_close_review"
+    elif latest_close:
+        implementation_state = "unknown_legacy_review_hash"
+    else:
+        implementation_state = "no_close_review"
+    return {
+        "implementation": implementation_state,
+        "evidence": evidence_state,
+        "review": "review_required" if review_required else "valid_or_not_required",
+        "publication": "required" if publication_required else "not_required_or_satisfied",
+        "equivalent_evidence_claims": equivalent_claims,
+        "review_required": review_required,
+        "review_required_reasons": review_reasons,
+        "rerun_evidence_required": rerun_evidence_required,
+        "statuses": statuses,
+    }
+
+
+def finalize_check(args: argparse.Namespace) -> int:
+    root = args.root
+    work_unit_id, wu_path = resolve_wu(root, args.id)
+    validate_blocking, validate_warnings = validate_work_unit(root, work_unit_id, wu_path)
+    gate_results: Dict[str, Dict[str, Any]] = {}
+    for name, func in (("spec", check_spec), ("scope", check_scope), ("verification", check_verification), ("review", check_review)):
+        decision, blocking, warnings = func(root, wu_path)
+        gate_results[name] = {"decision": decision, "blocking_reasons": blocking, "warnings": warnings}
+    surfaces = finalize_surfaces(root, wu_path, gate_results)
+    clean = workspace_clean(root)
+    blocking = [f"validate: {x}" for x in validate_blocking]
+    warnings = [f"validate: {x}" for x in validate_warnings]
+    for name, result in gate_results.items():
+        blocking.extend([f"{name}: {x}" for x in result["blocking_reasons"]])
+        warnings.extend([f"{name}: {x}" for x in result["warnings"]])
+    if not clean:
+        warnings.append("workspace has uncommitted changes; archive/integration may still be inappropriate.")
+    decision = "BLOCK" if blocking else "WARN" if warnings else "PASS"
+    review_required = bool(surfaces["review_required"])
+    rerun_evidence_required = bool(surfaces["rerun_evidence_required"])
+    do_not_request_review = not review_required
+    forbidden_next_actions: List[str] = []
+    if do_not_request_review:
+        forbidden_next_actions.extend([
+            "request close review solely because HEAD changed",
+            "request close-addendum solely because evidence receipts were refreshed",
+            "request close-addendum for commit materialization when implementation_diff_hash is unchanged",
+        ])
+    if not rerun_evidence_required:
+        forbidden_next_actions.append("rerun evidence solely because HEAD/full diff changed while implementation_diff_hash is unchanged")
+    required_next_action = "Fix blocking reasons."
+    if not blocking:
+        if not clean:
+            required_next_action = "Resolve workspace changes, then archive or handoff."
+        else:
+            required_next_action = "Archive locally or hand off to PR/CI integration surface."
+    elif rerun_evidence_required:
+        required_next_action = "Refresh only the evidence claims marked requires_rerun=true, then rerun finalize-check."
+    elif review_required:
+        required_next_action = "Request the minimal review type required by review_required_reasons; do not use review to refresh receipt IDs."
+    out = {
+        "schema_version": "harness.finalize_check.v1",
+        "work_unit_id": work_unit_id,
+        "decision": decision,
+        "gates": gate_results,
+        "surfaces": surfaces,
+        "workspace_clean": clean,
+        "archive_ready": decision in {"PASS", "WARN"} and clean,
+        "review_required": review_required,
+        "rerun_evidence_required": rerun_evidence_required,
+        "do_not_request_review": do_not_request_review,
+        "forbidden_next_actions": forbidden_next_actions,
+        "review_guidance": "Do not request close review or close-addendum unless review_required=true and review_required_reasons name a judgment-affecting change." if do_not_request_review else "Review is required because the judgment surface changed; inspect review_required_reasons before selecting full close, addendum, publication, risk, or human gate.",
+        "blocking_reasons": blocking,
+        "warnings": warnings,
+        "required_next_action": required_next_action,
+        "created_at": now_iso(),
+    }
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+    return 2 if decision == "BLOCK" and args.strict else 0
+
+
 CHECKS = {
     "spec": check_spec,
     "scope": check_scope,
@@ -1943,7 +2242,7 @@ def check(args: argparse.Namespace) -> int:
     if args.gate == "verification":
         details, _b, _w = verification_detail_report(root, wu_path)
         out["evidence_status"] = details
-        out["minimal_evidence_plan"] = [d for d in details if d.get("status") not in {"satisfied", "waived"}]
+        out["minimal_evidence_plan"] = [d for d in details if d.get("status") not in {"satisfied", "equivalent_pass", "waived"}]
     print(json.dumps(out, ensure_ascii=False, indent=2))
     return 2 if decision == "BLOCK" and args.strict else 0
 
@@ -2188,6 +2487,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--all", action="store_true", help="Validate every active and archived Work Unit.")
     p.add_argument("--strict", action="store_true", help="Return exit 2 on BLOCK.")
     p.set_defaults(func=validate)
+
+    p = sub.add_parser("finalize-check")
+    p.add_argument("--id")
+    p.add_argument("--strict", action="store_true", help="Return exit 2 on BLOCK.")
+    p.set_defaults(func=finalize_check)
 
     p = sub.add_parser("ci")
     p.add_argument("--strict", action="store_true", help="Return exit 2 on BLOCK.")

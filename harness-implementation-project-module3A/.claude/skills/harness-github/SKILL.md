@@ -117,6 +117,8 @@ test: cover committed out-of-bounds diff
 
 Use the body for quick human understanding first, then traceability and verification. Do not make readers open evidence receipts or the diff just to understand what changed.
 
+For non-trivial Work Unit commits, the body must include a `Summary:` section before metadata. The summary should describe the behavior or mechanism change in 1-4 concrete bullets. A body containing only `Work Unit`, `Refs`, `Depends-on`, `Evidence`, `Plan review`, `Close review`, and `Risk` is not acceptable because it is traceable but not understandable.
+
 ```text
 Summary:
 - Added the bounded scope gate for committed and uncommitted changes.

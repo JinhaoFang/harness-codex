@@ -47,13 +47,22 @@ Before acceptance, check:
 - Risk boundary was not crossed without approval.
 - Tests are behavior-oriented and cover the risk surface.
 - Findings are concrete and actionable.
-- Passing close review cites the fresh evidence receipt IDs that support every required evidence claim for medium or higher risk.
+- Passing close review cites evidence receipt IDs for the claims it judged. It does not need to be rerun merely because an equivalent receipt was refreshed later and implementation/scope/risk did not change.
 
-## Close-addendum and publication review
+## Review validity surface
 
-Use close-addendum when a prior close review remains valid for the implementation, but a lightweight amendment adds or changes required evidence, acceptance wording, or publication/collaboration evidence. Use publication review for GitHub issue/PR/branch publication checks. Do not use either mode to hide implementation, scope, risk, or behavior changes that require full close review.
+Review validity is about the judgment surface, not latest artifact ids. Do not request a reviewer only because one of these changed:
 
-Close-addendum should read the previous close review, latest amendment, current contract, current evidence receipts, and implementation diff hash. Publication review should read the GitHub artifact, linked Work Unit, publication evidence receipt, and PR/issue body.
+- refreshed evidence receipt IDs for already-reviewed claims;
+- commit creation, squash, or rebase where implementation diff is equivalent;
+- CI rerun or command log path changes;
+- handoff, archive, state, receipt, or review-request files under `.harness/`;
+- GitHub issue/PR/branch metadata after publication review;
+- generated lifecycle summaries or final notes.
+
+Request full close review when implementation, scope, risk, success criteria, acceptance semantics, dependency/runtime surface, or test expectations changed. Request publication review for GitHub issue/PR/branch publication. Request close-addendum only when a prior close review remains valid for implementation but a lightweight non-publication acceptance judgment changed and controller review gate is blocking for that reason.
+
+Before requesting close-addendum, run `harnessctl check --gate review --strict` or `harnessctl finalize-check --strict`. Only request review when `finalize-check` reports `review_required: true`; do not request review when it reports `rerun_evidence_required: false` and `do_not_request_review: true`.
 
 ## Commands
 
@@ -71,16 +80,17 @@ Close review:
 python3 harness/cli/harnessctl.py request-review --id <WU-ID> --mode close --reviewer-role reviewer-agent
 python3 harness/cli/harnessctl.py submit-review --id <WU-ID> --mode close --decision PASS --reviewer-role reviewer-agent --independence-level fresh_context --evidence-ref <EV-RECEIPT-ID>
 python3 harness/cli/harnessctl.py check --id <WU-ID> --gate review --strict
+python3 harness/cli/harnessctl.py finalize-check --id <WU-ID> --strict
 ```
 
-The builder must not write the close review verdict for its own work. A PASS without `--evidence-ref <EV-RECEIPT-ID>` is not acceptable for medium or higher risk close review.
+The builder must not write the close review verdict for its own work. A medium-or-higher risk close review must cite an evidence snapshot or receipt at least once, but it does not need to cite every required claim or every refreshed receipt ID.
 
 
-Close-addendum review:
+Close-addendum review, only when review gate blocks for a lightweight acceptance judgment change. Do not use this for receipt refresh, commit materialization, publication metadata, or lifecycle updates:
 
 ```bash
 python3 harness/cli/harnessctl.py request-review --id <WU-ID> --mode close-addendum --reviewer-role reviewer-agent
-python3 harness/cli/harnessctl.py submit-review --id <WU-ID> --mode close-addendum --decision PASS --reviewer-role reviewer-agent --independence-level fresh_context --evidence-ref <NEW-EV-RECEIPT-ID>
+python3 harness/cli/harnessctl.py submit-review --id <WU-ID> --mode close-addendum --decision PASS --reviewer-role reviewer-agent --independence-level fresh_context --evidence-ref <JUDGMENT-AFFECTED-EV-RECEIPT-ID>
 python3 harness/cli/harnessctl.py check --id <WU-ID> --gate review --strict
 ```
 

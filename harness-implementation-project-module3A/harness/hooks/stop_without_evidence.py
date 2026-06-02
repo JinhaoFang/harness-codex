@@ -105,6 +105,29 @@ def controller_gate(base: Path, wu_id: str, gate: str) -> tuple[bool, str, dict[
     return False, reason, obj
 
 
+def controller_finalize(base: Path, wu_id: str) -> tuple[bool, str, dict[str, Any]]:
+    ctl = base / "harness" / "cli" / "harnessctl.py"
+    if not ctl.exists():
+        return False, "Missing harness controller CLI; cannot run finalize-check.", {}
+    proc = subprocess.run(
+        [sys.executable, str(ctl), "--root", str(base), "finalize-check", "--id", wu_id, "--strict"],
+        cwd=base,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    try:
+        obj = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        obj = {}
+    if proc.returncode == 0 and obj.get("decision") in {"PASS", "WARN"}:
+        reason = "; ".join(obj.get("warnings", [])) if obj.get("decision") == "WARN" else ""
+        return True, reason, obj
+    reason = proc.stdout.strip() or proc.stderr.strip() or "finalize-check blocked."
+    return False, reason, obj
+
+
 def summarize_controller_block(obj: dict[str, Any], fallback: str) -> str:
     reasons = [str(x) for x in obj.get("blocking_reasons", []) if str(x).strip()]
     if not reasons:
@@ -115,10 +138,15 @@ def summarize_controller_block(obj: dict[str, Any], fallback: str) -> str:
 
 
 def stop_block(reason: str, gate: str, wu_id: str, next_action: str) -> None:
+    command = f"python3 harness/cli/harnessctl.py check --id {wu_id} --gate {gate} --strict"
+    stop_block_with_command(reason, wu_id, command, next_action)
+
+
+def stop_block_with_command(reason: str, wu_id: str, command: str, next_action: str) -> None:
     msg = (
         f"Stop blocked for active Work Unit {wu_id}: {reason} "
         f"Next action: {next_action} Then run "
-        f"`python3 harness/cli/harnessctl.py check --id {wu_id} --gate {gate} --strict`."
+        f"`{command}`."
     )
     print(json.dumps({"decision": "block", "reason": msg}))
 
@@ -132,6 +160,46 @@ def main() -> int:
     if not has_changed_files(base, wu_id):
         play_hook_sound("complete")
         return 0
+    finalize_ok, finalize_reason, finalize_obj = controller_finalize(base, wu_id)
+    if finalize_ok:
+        play_hook_sound("complete")
+        return 0
+    if finalize_obj:
+        summary = summarize_controller_block(finalize_obj, finalize_reason)
+        command = f"python3 harness/cli/harnessctl.py finalize-check --id {wu_id} --strict"
+        if finalize_obj.get("rerun_evidence_required"):
+            stop_block_with_command(
+                f"verification gate is not satisfied because {summary}. Do not summarize as complete.",
+                wu_id,
+                command,
+                "refresh only the evidence claims marked requires_rerun=true, or create a scoped human-approved waiver if the evidence cannot be produced.",
+            )
+            return 0
+        if finalize_obj.get("review_required"):
+            stop_block_with_command(
+                f"review validity gate is not satisfied because {summary}. Do not stop after implementation evidence alone.",
+                wu_id,
+                command,
+                "request the minimal review type required by review_required_reasons, then wait for the reviewer verdict.",
+            )
+            return 0
+        surfaces = finalize_obj.get("surfaces", {})
+        if surfaces.get("publication") == "required":
+            stop_block_with_command(
+                f"publication surface is not satisfied because {summary}. Do not rerun implementation close review for publication metadata alone.",
+                wu_id,
+                command,
+                "record the missing GitHub publication evidence or request publication review for the cited publication receipt.",
+            )
+            return 0
+        stop_block_with_command(
+            f"finalize-check is not satisfied because {summary}. Do not summarize as complete.",
+            wu_id,
+            command,
+            str(finalize_obj.get("required_next_action") or "fix the blocking reasons reported by finalize-check."),
+        )
+        return 0
+
     verification_ok, verification_reason, verification_obj = controller_gate(base, wu_id, "verification")
     if not verification_ok:
         summary = summarize_controller_block(verification_obj, verification_reason)
