@@ -243,6 +243,19 @@ class HarnessCtlTests(unittest.TestCase):
             stop = root / "harness" / "hooks" / "stop_without_evidence.py"
             proc = subprocess.run([sys.executable, str(stop)], cwd=root, text=True, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
             self.assertEqual(proc.stdout, "")
+
+            context = root / "harness" / "hooks" / "context_router.py"
+            proc = subprocess.run([sys.executable, str(context), "PostCompact"], cwd=root, text=True, input=json.dumps({"cwd": str(root)}), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            out = json.loads(proc.stdout)
+            self.assertIn("Harness routing:", out["systemMessage"])
+            self.assertNotIn("hookSpecificOutput", out)
+
+            run(root, "init")
+            run(root, "new", "--id", "WU-POSTCOMPACT", "--title", "Post Compact", "--type", "bugfix", "--risk", "low")
+            proc = subprocess.run([sys.executable, str(context), "PostCompact"], cwd=root, text=True, input=json.dumps({"cwd": str(root)}), stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            out = json.loads(proc.stdout)
+            self.assertIn("active Work Unit WU-POSTCOMPACT", out["systemMessage"])
+            self.assertNotIn("hookSpecificOutput", out)
         finally:
             shutil.rmtree(root, ignore_errors=True)
 

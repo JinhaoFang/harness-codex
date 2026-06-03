@@ -118,6 +118,9 @@ def main() -> int:
     event = load_event()
     base = root(event)
     additional = context_for_event(base, args.event, event)
+    if args.event == "PostCompact":
+        print(json.dumps({"systemMessage": additional}))
+        return 0
     print(json.dumps({
         "hookSpecificOutput": {
             "hookEventName": args.event,
