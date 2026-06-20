@@ -8,20 +8,35 @@
     "work_unit_id",
     "claim_ref",
     "actor",
+    "observation",
     "type",
+    "phase",
+    "command",
+    "argv",
+    "expected_outcome",
+    "observed_outcome",
     "result",
     "started_at",
     "ended_at",
-    "head_commit",
-    "diff_hash",
+    "exit_code",
     "base_commit",
+    "head_commit",
+    "branch",
+    "workspace_id",
+    "spec_hash",
+    "plan_hash",
+    "diff_hash",
+    "implementation_diff_hash",
     "changed_files",
+    "implementation_changed_files",
     "verification_scope",
-    "freshness_basis"
+    "freshness_basis",
+    "command_log_ref",
+    "command_log_hash"
   ],
   "properties": {
     "schema_version": {
-      "const": "harness.evidence_receipt.v2.1"
+      "const": "harness.evidence_receipt.v3"
     },
     "receipt_id": {
       "type": "string"
@@ -34,31 +49,49 @@
     },
     "actor": {
       "enum": [
-        "agent",
         "controller",
-        "ci",
+        "agent",
         "human",
-        "reviewer"
+        "ci"
+      ]
+    },
+    "observation": {
+      "enum": [
+        "controller_executed_command",
+        "skipped_not_evidence"
       ]
     },
     "type": {
+      "type": "string"
+    },
+    "phase": {
       "enum": [
-        "unit",
-        "integration",
-        "typecheck",
-        "lint",
-        "e2e",
-        "runtime",
-        "migration",
-        "benchmark",
-        "security",
-        "manual",
-        "test",
-        "review"
+        "red",
+        "green",
+        "final"
       ]
     },
     "command": {
       "type": "string"
+    },
+    "argv": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "expected_outcome": {
+      "enum": [
+        "pass",
+        "fail"
+      ]
+    },
+    "observed_outcome": {
+      "enum": [
+        "exit_zero",
+        "exit_nonzero",
+        "not_run"
+      ]
     },
     "result": {
       "enum": [
@@ -72,6 +105,9 @@
     },
     "ended_at": {
       "type": "string"
+    },
+    "duration_seconds": {
+      "type": "number"
     },
     "exit_code": {
       "type": [
@@ -97,7 +133,7 @@
         "type": "string"
       }
     },
-    "covers": {
+    "implementation_changed_files": {
       "type": "array",
       "items": {
         "type": "string"
@@ -109,28 +145,28 @@
     "freshness_basis": {
       "type": "string"
     },
-    "artifact_uri": {
-      "type": "string"
-    },
-    "waiver_ref": {
-      "type": "string"
-    },
-    "note": {
-      "type": "string"
-    },
-    "artifact_hash": {
-      "type": "string"
-    },
     "command_log_ref": {
-      "type": "string"
-    },
-    "manual_artifact_ref": {
       "type": "string"
     },
     "environment_ref": {
       "type": "string"
     },
-    "last_relevant_change_at": {
+    "note": {
+      "type": "string"
+    },
+    "command_log_hash": {
+      "type": "string"
+    },
+    "spec_hash": {
+      "type": "string"
+    },
+    "plan_hash": {
+      "type": "string"
+    },
+    "branch": {
+      "type": "string"
+    },
+    "workspace_id": {
       "type": "string"
     }
   }

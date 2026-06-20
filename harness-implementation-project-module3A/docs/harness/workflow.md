@@ -1,92 +1,85 @@
-# Workflow Contract
+# Workflow
 
 ## 1. Clarify
 
-The agent should not start implementation while essential intent, scope, success, or risk questions are unresolved. Ask the smallest number of questions needed to freeze the Work Unit.
+Start with `harness-clarify`. Ask one high-value question at a time, give a recommended answer when useful, and inspect the repository when the answer is already available there. Do not modify product files.
 
-If the task is time-sensitive or the user asks for immediate action, proceed with explicit assumptions and mark them in the contract.
+The output is a draft `docs/spec/<WU-ID>.md` containing intent, observable outcome, non-goals, write boundary, out-of-bounds paths, evidence claims, stop conditions, decisions and remaining assumptions.
 
-## 2. Specify
+## 2. Approve the tracked spec
 
-Create or update a Work Unit Contract. The contract is the shared truth for user intent and scope. Execution plans may change; the contract should not drift silently.
-
-Gate:
+The user approves a concrete revision:
 
 ```bash
-python3 harness/cli/harnessctl.py check --id <WU-ID> --gate spec --strict
-python3 harness/cli/harnessctl.py lock --id <WU-ID> --status ready
+python3 harness/cli/harnessctl.py approve-spec \
+  --id <WU-ID> --approved-by human:<identity> --approval-ref <issue/comment/ref>
 ```
 
-For non-trivial work, unresolved open questions, placeholders, missing write boundary, missing required evidence, or missing stop conditions block lock/readiness. After lock, changes to intent, scope, risk, required evidence, success criteria, or stop conditions must be recorded with `harnessctl amend`; otherwise readiness/running transitions are blocked. Classify the amendment impact when recording it: `context_only`, `collaboration_only`, `evidence_only`, `success_criteria`, `scope_or_risk`, or `implementation`. Re-run plan review only when the amendment changes the plan, implementation boundary, risk, success criteria, or user intent. Evidence-only and collaboration-only amendments should not invalidate implementation evidence or force full plan review when implementation content is unchanged.
+The controller writes approval metadata and a content hash into the tracked spec. Editing approved content makes that marker stale until it is explicitly reapproved or amended.
 
-## 3. Route context
+## 3. Design locally
 
-Use the project map first. Then read only the docs, code, tests, ADRs, and runtime surfaces that are relevant to the contract.
+The technical plan is an intermediate artifact:
 
-Record context pointers in the contract or handoff when they materially affect implementation.
+```text
+.harness/work-units/active/<WU-ID>/plan.md
+```
 
-## 4. Implement with TDD discipline
+It must be rebuilt from the approved spec, current code/tests/runtime, Git/GitHub context and local rules. It includes architecture tradeoffs, the change map, TDD behavior slices, verification commands, risks and the questions the reviewer must revisit.
 
-Use behavior-first TDD for production changes:
+## 4. Plan review
 
-1. Write or identify a failing regression or behavior test.
-2. Run it and record RED evidence when it is useful.
-3. Implement the smallest vertical slice.
-4. Run the targeted test and broader required checks.
-5. Record GREEN evidence.
-6. Refactor only while green.
-
-Do not apply TDD dogmatically to pure docs, mechanical renames, generated snapshots, or exploratory spikes. In those cases, write an explicit evidence plan or waiver.
-
-## 5. Capture evidence
-
-Every completion claim needs fresh, claim-relative evidence or waiver. Skipped checks are not pass results. For medium or higher risk, passing evidence should include a command log, artifact URI, or manual artifact reference so review can inspect what actually happened.
-
-Evidence freshness is strict for implementation changes. HEAD, diff representation, or harness lifecycle artifacts under `.harness/` can change after evidence or review for commits, handoff, receipts, review records, or archival notes; when implementation content is unchanged, those non-implementation context changes should warn rather than force all product evidence to be rerun.
-
-Gate:
+A reviewer reads the current repository, approved spec and local plan directly. It does not review formatting alone and does not rely primarily on the planner's narrative.
 
 ```bash
-python3 harness/cli/harnessctl.py validate --id <WU-ID> --strict
-python3 harness/cli/harnessctl.py check --id <WU-ID> --gate verification --strict
+harnessctl request-review --mode plan --reviewer-id <REVIEWER-ID> --reviewer-session <REVIEW-SESSION> --planner-id <PLANNER-ID> --planner-session <PLANNER-SESSION>
+harnessctl submit-review  --mode plan --request-id <ID> --decision PASS ...
 ```
 
-CI / protected branch gate:
+The first request creates one review track. Close review normally reuses that reviewer identity.
+
+## 5. Isolated implementation with TDD
+
+After plan review:
 
 ```bash
-python3 harness/cli/harnessctl.py ci --strict
+harnessctl start-work --id <WU-ID> --builder-id <ID> --builder-session <SESSION>
 ```
 
-## 6. Review
-
-Plan review checks whether the execution plan is grounded in repository truth before implementation starts. Close review checks whether implementation diff, scope, risk, and maintainability satisfy the Work Unit Contract before acceptance. Publication review checks GitHub issue/PR/branch publication and does not replace implementation close review. Close-addendum is exceptional: use it only when a lightweight acceptance judgment changed and a full close review would be excessive.
-
-Review validity is surface-based, not artifact-id based. The close review remains valid when the reviewed implementation diff is unchanged and there is no implementation, scope, risk, or success-criteria amendment. Evidence refresh, commit materialization, CI rerun, receipt ID changes, handoff/archive/state updates, `.harness/` runtime changes, and GitHub issue/PR metadata do not invalidate close review. Verification gate owns evidence freshness. Publication gate owns GitHub collaboration readiness. Review gate owns judgment validity.
-
-For medium or higher risk, `running` requires a passing plan review or explicit self-check downgrade where allowed. For high or critical risk, use independent review or human gate. For medium or higher risk, the passing review set must cite an evidence snapshot or receipt at least once, but review validity is not keyed by the latest receipt IDs or command log paths. Use `harnessctl finalize-check` to collect validate, verification, review, and workspace status before archive/handoff instead of manually interpreting multiple gates.
-
-On Codex, subagents are explicit. When a Work Unit requires reviewer or worker isolation, the main agent must start the reviewer/worker directly and wait for the result before continuing; do not rely on automatic delegation.
-
-Gates:
+Use a separate worker session/worktree where practical. For behavior changes:
 
 ```bash
-python3 harness/cli/harnessctl.py check --id <WU-ID> --gate plan-review --strict
-python3 harness/cli/harnessctl.py check --id <WU-ID> --gate review --strict
-python3 harness/cli/harnessctl.py finalize-check --id <WU-ID> --strict
+harnessctl verify --claim EV1 --phase red   --expect fail -- <targeted-test>
+harnessctl verify --claim EV1 --phase green --expect pass -- <targeted-test>
+harnessctl verify --claim EV1 --phase final
 ```
 
-`finalize-check` is an action-level closer. It reports `review_required`, `rerun_evidence_required`, `do_not_request_review`, `forbidden_next_actions`, and `surfaces`. When implementation diff is unchanged, equivalent evidence is `equivalent_pass`, not a warning. Agents must follow these action fields rather than infer new reviewer work from HEAD changes or receipt refreshes.
+A RED run counts only when the command actually exits non-zero as expected. The plan must state the expected failure reason so the worker checks that the test failed for the intended behavior rather than setup noise. GREEN helps the worker keep the slice honest during implementation; final verification is the acceptance-grade receipt used by completion gates.
 
-## 7. GitHub collaboration
+## 6. Verification
 
-Use GitHub after the local task shape is grounded. Create issues, branches, commits, and PRs after the Work Unit is specified and the relevant plan review has passed. GitHub records collaboration state; it does not replace the contract, evidence receipts, review verdicts, waivers, or controller gates. If GitHub collaboration is added after implementation, record it as a `collaboration_only` amendment, add publication evidence, and use publication review instead of rerunning implementation review unless code/scope/risk changed. Do not ask for close-addendum merely because implementation evidence was refreshed after publication; verification gate owns evidence freshness.
+`harnessctl verify` launches the process, captures stdout/stderr, records argv/cwd/time/exit code, and binds the receipt to the current implementation content. Users do not provide a `pass` result.
 
-Do not keep a local Work Unit active only because a PR is waiting for merge. Once local implementation, evidence, close review, and PR/update publication are complete, archive the Work Unit locally with a no-next-step reason or handoff. If PR review or merge later requires changes, reopen the archived Work Unit or create a follow-up Work Unit with the new scope.
+If a required check cannot run, use `record-skipped` to make the blocker visible. The task remains blocked until the evidence is produced or the evidence contract is materially revised and the spec is reapproved.
 
-## 8. Handoff or archive
+## 7. Close review
 
-A task can be archived when local completion gates pass: evidence/waiver, required review, and either a handoff or an explicit `--no-next-step-reason`. Remote PR merge is not a prerequisite for local archive because the harness cannot reliably infer merge state from local repository state.
+The same review track reads the current diff, code, tests and fresh evidence. The reviewer is read-only; findings return to the worker. Changes after evidence or close review invalidate the affected gate.
 
-## 9. Compound or prune
+```bash
+harnessctl request-review --mode close --reviewer-id <same-ID> --reviewer-session <fresh-session>
+harnessctl submit-review  --mode close --request-id <ID> --decision PASS --evidence-ref <receipt>
+harnessctl finalize-check --id <WU-ID> --strict
+```
 
-Keep or add a mechanism only if it has a failure trace, protected invariant, validation method, known cost, and removal condition.
+## 8. Git/GitHub and recovery
+
+Git branches/worktrees isolate execution; commits and diffs are execution truth; GitHub issues/PRs/CI/human reviews are collaboration and integration truth. They do not replace the approved spec or controller-observed verification.
+
+Generate a local handoff before transferring work. To continue an existing local handoff or cleared blocker, run `resume-work` with a fresh worker session; no generic state mutation command is provided. If `.harness/` is lost:
+
+```bash
+harnessctl resume --id <WU-ID>
+```
+
+An approved marker in the tracked spec allows recovery into `spec_approved`; otherwise recovery returns to clarification. Old local plan, evidence and review are never invented.

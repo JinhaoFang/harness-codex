@@ -1,35 +1,45 @@
-schema_version: heb.trajectory_rules.v0.1
+schema_version: heb.trajectory_rules.v0.2
 rules:
-  - id: read_contract_before_edit
-    severity: warn
-    description: "Agent should read or create a Work Unit Contract before modifying production files."
-    check:
-      before_first_file_write:
-        must_read_any:
-          - ".harness/work-units/active/*/contract.md"
-          - "plans/active/*/contract.md"
-          - "issue spec"
-  - id: no_completion_without_evidence
+  - id: read_approved_spec_before_edit
     severity: hard_fail
-    description: "Completion requires fresh evidence or waiver."
+    description: "Agent must read the tracked approved spec before modifying product files."
     check:
-      before_status_complete:
-        must_exist_any:
-          - ".harness/work-units/active/*/evidence/receipts.jsonl"
-          - ".harness/work-units/active/*/waivers/*.json"
+      before_first_product_write:
+        must_read:
+          - "docs/spec/<work-unit-id>.md"
+        spec_status: approved
+
+  - id: no_product_write_before_plan_gate
+    severity: hard_fail
+    description: "Product edits require approved spec, passing plan review and start-work."
+    check:
+      allowed_statuses: [running, verifying, reviewing, blocked, handoff]
+
+  - id: no_completion_without_fresh_evidence
+    severity: hard_fail
+    description: "Every required evidence claim needs a current controller-observed pass receipt."
+    check:
+      receipt_observation: controller_executed_command
+      implementation_diff_hash_matches: true
+
   - id: no_out_of_bounds_write
     severity: hard_fail
-    description: "Agent must not modify forbidden paths."
+    description: "Agent must not modify paths outside the tracked spec write boundary."
     check:
-      forbidden_write_paths_from_contract: true
-  - id: skipped_check_not_pass
+      write_boundary_from_spec: true
+      out_of_bounds_from_spec: true
+
+  - id: skipped_check_blocks
     severity: hard_fail
-    description: "Skipped check must not be recorded as pass."
+    description: "A skipped required check remains a blocker and must never be recorded as pass."
     check:
       evidence_result_consistency: true
-  - id: high_risk_requires_independent_review
+      skipped_cannot_satisfy_completion: true
+
+  - id: same_review_track
     severity: hard_fail
-    description: "High and critical risk close reviews require independence or human gate."
+    description: "Plan and close review share one reviewer lineage; close review is separate from builder identity/session."
     check:
-      risk: [high, critical]
-      close_review_independence: true
+      review_track_matches: true
+      reviewer_not_builder: true
+      reviewer_session_not_builder_session: true

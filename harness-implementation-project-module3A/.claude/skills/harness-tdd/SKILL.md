@@ -1,45 +1,34 @@
 ---
 name: harness-tdd
-description: Apply behavior-first test-driven development to a bounded coding Work Unit. Use for feature implementation, bug fixes, behavior changes, public interface/schema changes, lifecycle state changes, error handling, permissions, or any task whose correctness should be proven with red/green/refactor evidence.
+description: Implement an approved plan through behavior-first RED/GREEN/refactor slices using controller-executed verification. Use for bug fixes, features, interfaces, schemas, errors, permissions, or lifecycle behavior.
 ---
 
 # Harness TDD
 
-Drive implementation through one behavior slice at a time. Tests are evidence candidates; they do not replace final evidence receipts or review.
+Prerequisites: approved tracked spec, passing plan review, and `harnessctl start-work`.
 
-## Inputs required
+For each behavior slice:
 
-- Work Unit ID and contract.
-- Acceptance criterion or behavior claim.
-- Target verification command.
-- Allowed test and implementation paths from the write boundary.
+1. Write one externally observable test.
+2. State the **expected reason** the old implementation should fail.
+3. Run RED through `harnessctl verify` and inspect output to confirm the observed failure matches that expected reason:
 
-If any required input is missing, stop and ask for the missing field or return to `harness-clarify` / `harness-spec`.
+```bash
+python3 harness/cli/harnessctl.py verify --id <WU-ID> --claim <EV-ID> --phase red --expect fail -- <targeted-command>
+```
 
-## Cycle
+4. Implement the smallest vertical slice inside the approved write boundary.
+5. Run GREEN:
 
-1. **RED**: write one test for one observable behavior through a public interface.
-2. Run the targeted command and confirm the test fails for the expected reason.
-3. **GREEN**: implement the minimum vertical slice needed for that test.
-4. Re-run the same command and confirm it passes.
-5. Run broader verification required by the Work Unit when relevant.
-6. **REFACTOR** only while green; re-run verification after each meaningful refactor.
-7. Record evidence with `harness-evidence` or `harnessctl evidence`.
+```bash
+python3 harness/cli/harnessctl.py verify --id <WU-ID> --claim <EV-ID> --phase green --expect pass -- <targeted-command>
+```
 
-## Test selection
+6. Refactor only while green and rerun affected commands.
+7. Run final or broader evidence for every required claim:
 
-- Bug fix: first test reproduces the bug.
-- Public behavior: behavior or integration test through stable interface.
-- API / CLI / schema: contract test for externally consumed shape.
-- Error or permission change: negative/error-path tests.
-- State machine or lifecycle: state-transition tests.
-- Multi-component user flow: e2e or equivalent runtime behavior check.
+```bash
+python3 harness/cli/harnessctl.py verify --id <WU-ID> --claim <EV-ID> --phase final
+```
 
-## Hard rules
-
-- One test slice at a time; do not bulk-write imagined future tests.
-- Prefer state/behavior assertions over internal call-count or private-method assertions.
-- Do not refactor while RED.
-- Do not make Green changes outside the Work Unit boundary.
-- Do not call skipped tests pass.
-- If the planned test cannot be made real, stop and update the evidence plan or request a waiver.
+A RED receipt proves only that the command exited non-zero as expected; the worker/reviewer must still verify the failure reason. RED never satisfies completion. If the test cannot express the behavior, return to the plan rather than weakening the assertion.

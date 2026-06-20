@@ -1,23 +1,13 @@
 {
   "hooks": {
-    "SubagentStart": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 harness/hooks/context_router.py SubagentStart"
-          }
-        ]
-      }
-    ],
     "PreCompact": [
       {
         "matcher": "manual|auto",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 harness/hooks/pre_compact_handoff_check.py"
+            "command": "python3 \"$(git rev-parse --show-toplevel)/harness/hooks/pre_compact_handoff_check.py\"",
+            "timeout": 30
           }
         ]
       }
@@ -28,18 +18,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 harness/hooks/context_router.py PostCompact"
+            "command": "python3 \"$(git rev-parse --show-toplevel)/harness/hooks/context_router.py\" PostCompact",
+            "timeout": 30
           }
         ]
       }
     ],
     "Stop": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 harness/hooks/stop_without_evidence.py"
+            "command": "python3 \"$(git rev-parse --show-toplevel)/harness/hooks/session_end_handoff_check.py\"",
+            "timeout": 30
           }
         ]
       }

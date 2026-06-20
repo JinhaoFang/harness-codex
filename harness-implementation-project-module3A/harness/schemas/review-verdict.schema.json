@@ -5,19 +5,39 @@
   "required": [
     "schema_version",
     "review_id",
+    "request_id",
+    "review_track_id",
     "work_unit_id",
     "mode",
-    "reviewer_role",
-    "builder_role",
+    "reviewer_id",
+    "reviewer_session_id",
+    "planner_id",
+    "planner_session_id",
+    "builder_id",
+    "builder_session_id",
     "independence_level",
+    "is_independent",
     "decision",
+    "approval_ref",
+    "reviewed_spec_hash",
+    "reviewed_plan_hash",
+    "reviewed_implementation_diff_hash",
+    "evidence_refs",
+    "findings",
+    "required_rework",
     "created_at"
   ],
   "properties": {
     "schema_version": {
-      "const": "harness.review_verdict.v1"
+      "const": "harness.review_verdict.v3"
     },
     "review_id": {
+      "type": "string"
+    },
+    "request_id": {
+      "type": "string"
+    },
+    "review_track_id": {
       "type": "string"
     },
     "work_unit_id": {
@@ -26,19 +46,25 @@
     "mode": {
       "enum": [
         "plan",
-        "close",
-        "close-addendum",
-        "publication",
-        "risk",
-        "security",
-        "architecture",
-        "evaluator"
+        "close"
       ]
     },
-    "reviewer_role": {
+    "reviewer_id": {
       "type": "string"
     },
-    "builder_role": {
+    "reviewer_identity_source": {
+      "type": "string"
+    },
+    "reviewer_session_id": {
+      "type": "string"
+    },
+    "reviewer_session_source": {
+      "type": "string"
+    },
+    "builder_id": {
+      "type": "string"
+    },
+    "builder_session_id": {
       "type": "string"
     },
     "independence_level": {
@@ -55,12 +81,20 @@
     "decision": {
       "enum": [
         "PASS",
-        "PASS_WITH_RISK_ACCEPTED",
         "CHANGES_REQUESTED",
         "REJECTED",
         "BLOCKED",
         "NEEDS_HUMAN_GATE"
       ]
+    },
+    "reviewed_spec_hash": {
+      "type": "string"
+    },
+    "reviewed_plan_hash": {
+      "type": "string"
+    },
+    "reviewed_implementation_diff_hash": {
+      "type": "string"
     },
     "evidence_refs": {
       "type": "array",
@@ -81,6 +115,15 @@
       }
     },
     "created_at": {
+      "type": "string"
+    },
+    "approval_ref": {
+      "type": "string"
+    },
+    "planner_id": {
+      "type": "string"
+    },
+    "planner_session_id": {
       "type": "string"
     }
   }

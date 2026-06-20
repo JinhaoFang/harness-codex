@@ -1,54 +1,30 @@
 ---
 name: harness-spec
-description: Create, lock, or amend a Work Unit Contract from clarified intent. Use after clarification or issue analysis when a non-trivial task needs frozen intent, scope, success conditions, required evidence, stop conditions, and context pointers before planning or implementation.
+description: Create and obtain explicit user approval for the tracked feature spec under docs/spec after clarification. Use before technical planning for any non-trivial coding task.
 ---
 
 # Harness Spec
 
-Create the smallest contract that lets an agent, reviewer, and controller agree on the same task truth.
+The tracked spec is desired-intent truth. Current code/tests/runtime remain current-project truth.
 
-## Rules
-
-- Contract owns user intent, scope, success, required evidence, and stop conditions.
-- Contract does not own lifecycle status; `state.json` is the lifecycle authority. Do not add `status:` to the contract header.
-- Execution plans, feature lists, Codex Goals, briefings, and agent summaries do not override the contract.
-- The agent should read `contract.md` directly before implementation. Do not replace it with a compressed briefing.
-- Scope, success, risk, required evidence, or user-intent changes require an explicit contract amendment before implementation continues.
-- Keep contract content checkable; avoid vague evidence like "verify it works".
-- Do not proceed while open questions, placeholders, missing write boundary, missing required evidence, or missing stop conditions block the spec gate.
-
-## Procedure
-
-1. Read the clarification summary and current repo context pointers.
-2. Create or update the Work Unit:
+1. Create the Work Unit if needed:
 
 ```bash
 python3 harness/cli/harnessctl.py new --id <WU-ID> --title "..." --type <type> --risk <risk>
 ```
 
-3. Fill `contract.md` with:
-   - intent;
-   - expected outcome;
-   - non-goals;
-   - likely changed areas;
-   - write boundary;
-   - out-of-bounds;
-   - required evidence IDs and commands;
-   - success / blocked stop conditions;
-   - resolved open questions or `- none`;
-   - context pointers.
-   Do not add lifecycle `status` to the YAML header; readiness is set by `harnessctl lock`.
-4. Run the spec gate and lock the Work Unit before implementation:
+2. Complete `docs/spec/<WU-ID>.md` with observable behavior, non-goals, write boundary, out-of-bounds paths, executable evidence claims, stop conditions, clarification decisions, and minimal context pointers.
+3. Do not put the technical implementation plan into the tracked spec.
+4. Run:
 
 ```bash
 python3 harness/cli/harnessctl.py check --id <WU-ID> --gate spec --strict
-python3 harness/cli/harnessctl.py lock --id <WU-ID> --status ready
 ```
 
-5. If the locked contract changes, record the amendment after editing `contract.md`:
+5. Walk the spec through with the user. Only after explicit approval run:
 
 ```bash
-python3 harness/cli/harnessctl.py amend --id <WU-ID> --field scope --reason "..." --summary "..."
+python3 harness/cli/harnessctl.py approve-spec --id <WU-ID> --approved-by human:<IDENTITY> --approval-ref "<issue comment, review note, or other durable approval reference>"
 ```
 
-After amendment, request a new plan review unless the amendment is context-only and has no effect on the plan, implementation boundary, evidence plan, risk, success criteria, stop conditions, or user intent. For that narrow case, record it with `--field context --review-impact none`; do not use `--review-impact none` for scope, evidence, risk, success, intent, or stop-condition changes.
+If the tracked spec changes later, approval and plan review become stale. Re-approve intentionally; never let a future design artifact rewrite current repository facts.

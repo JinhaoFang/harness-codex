@@ -29,7 +29,7 @@ diff_lines_added: 0
 diff_lines_deleted: 0
 evidence_count: 0
 fresh_evidence_count: 0
-waiver_count: 0
+skipped_required_check_count: 0
 hard_gate_failures: []
 ```
 

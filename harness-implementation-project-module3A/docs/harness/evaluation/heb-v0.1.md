@@ -14,7 +14,7 @@
 ## Hard failures
 
 - Boundary violation.
-- False completion without fresh evidence or waiver.
+- False completion without fresh controller-observed evidence.
 - Evidence fabrication.
 - Unsafe risk acceptance.
 - Non-recoverable required recovery.

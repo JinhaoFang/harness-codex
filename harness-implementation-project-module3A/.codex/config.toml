@@ -1,19 +1,9 @@
-# Project-scoped Codex adapter example.
-# Keep core harness state in .harness/, not in Codex thread memory.
-
-model = "gpt-5.5-codex"
+# Project-scoped Codex adapter. Model choice remains user/team configuration.
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 
-[projects]
-# Trust project-local config only after review.
-
 [features]
-# Enable at user level if supported by the installed Codex version.
-# goals = true
-# multi_agent_v2 = true
+hooks = true
 
 [tools]
 web_search = true
-
-# Platform facts are adapter-level. Do not move lifecycle state here.

@@ -7,30 +7,36 @@
     "work_unit_id",
     "status",
     "risk",
+    "spec_path",
+    "plan_path",
     "branch",
+    "worktree",
+    "workspace_id",
+    "base_commit",
     "head_commit",
     "changed_files",
-    "updated_at",
-    "base_commit",
-    "started_at_head",
-    "diff_hash"
+    "implementation_changed_files",
+    "diff_hash",
+    "implementation_diff_hash",
+    "updated_at"
   ],
   "properties": {
     "schema_version": {
-      "const": "harness.work_unit_state.v1"
+      "const": "harness.work_unit_state.v2"
     },
     "work_unit_id": {
       "type": "string"
     },
     "status": {
       "enum": [
-        "draft",
-        "specified",
+        "clarifying",
+        "spec_approved",
+        "planning",
+        "plan_reviewing",
         "ready",
         "running",
         "verifying",
         "reviewing",
-        "integrating",
         "handoff",
         "archived",
         "blocked"
@@ -45,16 +51,40 @@
         "critical"
       ]
     },
+    "spec_path": {
+      "type": "string"
+    },
+    "plan_path": {
+      "type": "string"
+    },
+    "spec_approved_hash": {
+      "type": "string"
+    },
+    "plan_approved_hash": {
+      "type": "string"
+    },
+    "review_track_id": {
+      "type": "string"
+    },
+    "builder_id": {
+      "type": "string"
+    },
+    "builder_session_id": {
+      "type": "string"
+    },
     "branch": {
       "type": "string"
     },
     "worktree": {
       "type": "string"
     },
-    "head_commit": {
+    "workspace_id": {
       "type": "string"
     },
-    "diff_hash": {
+    "base_commit": {
+      "type": "string"
+    },
+    "head_commit": {
       "type": "string"
     },
     "changed_files": {
@@ -62,6 +92,18 @@
       "items": {
         "type": "string"
       }
+    },
+    "implementation_changed_files": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "diff_hash": {
+      "type": "string"
+    },
+    "implementation_diff_hash": {
+      "type": "string"
     },
     "latest_evidence_refs": {
       "type": "array",
@@ -90,13 +132,16 @@
     "updated_at": {
       "type": "string"
     },
-    "base_commit": {
+    "planner_id": {
       "type": "string"
     },
-    "started_at_head": {
+    "planner_identity_source": {
       "type": "string"
     },
-    "no_next_step_reason": {
+    "planner_session_id": {
+      "type": "string"
+    },
+    "planner_session_source": {
       "type": "string"
     }
   }

@@ -1,31 +1,25 @@
 ---
 name: harness-compound
-description: Convert repeated agent failures, review findings, failed handoffs, false completions, context bloat, platform changes, or maintenance costs into durable harness assets or pruning decisions. Use after a Work Unit or when a mechanism should be added, downgraded, or removed.
+description: Convert a repeated failure, review finding, recovery gap, platform change, or maintenance burden into the smallest durable asset—or remove a mechanism that has no demonstrated value.
 ---
 
 # Harness Compound
 
-Compounding must reduce future entropy. Do not add mechanisms because they look professional.
-
-## Decision options
+Choose one outcome:
 
 ```text
-none | docs | adr | test | lint | ci | permission | hook | skill | controller-check | workflow | evaluator-rubric | deletion/pruning
+none | docs | adr | test | lint | ci | permission | hook | skill | controller-check | workflow | deletion/pruning
 ```
 
-## Mechanism test
-
-Before adding or keeping a mechanism, answer:
+Before retaining or adding a mechanism, record:
 
 ```yaml
-mechanism: ""
 purpose: ""
 failure_mode: ""
 protected_invariant: ""
 validation_method: ""
 known_cost: ""
 removal_condition: ""
-owner: ""
 ```
 
-Prefer tests, lint, CI, controller checks, or concise docs over adding always-on prompt text. If a mechanism has no traceable failure mode or removal condition, downgrade or delete it.
+Prefer executable tests/checks and short routed guidance. Do not add always-on instructions without a concrete failure trace. The unused waiver path was removed for exactly this reason; reintroduce risk acceptance machinery only after a real case proves it necessary.

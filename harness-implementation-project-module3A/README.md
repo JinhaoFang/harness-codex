@@ -1,84 +1,103 @@
-# Coding Agent Harness Implementation Project
+# Coding Agent Repository Harness
 
-This repository is a portable implementation scaffold for using Codex, Claude Code, or similar coding agents in a real codebase without turning the harness into a second product.
+A lightweight repository harness for Codex, Claude Code, and similar coding agents. It separates tracked product intent from disposable execution state and makes the critical lifecycle boundaries mechanical.
 
-The implementation is intentionally **controller-light but invariant-heavy**:
+## Design
 
-- the repository and runtime remain the source of project truth;
-- non-trivial work starts from a Work Unit Contract;
-- agent work is bounded by explicit write and risk boundaries;
-- completion requires fresh evidence or a waiver;
-- review verdicts are separated from evidence receipts;
-- handoff and state are generated from authoritative artifacts, not chat summaries;
-- every non-trivial mechanism has a purpose, validation method, cost, and removal condition.
+```text
+idea
+→ clarify tracked spec
+→ human approves spec revision
+→ build local technical plan
+→ plan review
+→ isolated worker + TDD
+→ controller-executed verification
+→ same reviewer track closes the work
+→ Git/GitHub integration or local handoff
+```
 
-Use this project by installing the platform profile that matches your repository:
+Truth placement is deliberately small:
 
-| Target profile | Copy first | Add only when needed |
+| Location | Purpose | Git tracked |
 |---|---|---|
-| Codex Harness | Common runtime + `AGENTS.md`, `.codex` | policy-as-code, protected branch gates |
-| Claude Harness | Common runtime + `CLAUDE.md`, `.claude` | policy-as-code, protected branch gates |
+| `docs/spec/<WU-ID>.md` | approved product intent, scope, success, evidence contract | yes |
+| current code/tests/runtime | current project truth | yes / runtime |
+| Git and GitHub | actual changes, collaboration, CI, review and integration history | yes / remote |
+| `.harness/` | local plan, state, command logs, evidence index, review track, handoff | no |
 
-## Fast start
+`.harness/` is recoverable runtime, not the system of record. Losing it must not lose product intent. Run `resume` to rebuild a safe local starting point from the tracked spec and current repository; prior local evidence and review are not assumed.
 
-```bash
-python3 harness/cli/harnessctl.py init
-python3 harness/cli/harnessctl.py new --id WU-001 --title "Fix login redirect" --type bugfix --risk medium
-cat .harness/work-units/active/WU-001/contract.md
-python3 harness/cli/harnessctl.py status --id WU-001
-```
+## What the controller enforces
 
-After implementation work:
+- Product-file boundaries are enforced by controller gates and can be reinforced by optional platform policy hooks when a repository chooses to wire them in.
+- Implementation cannot start before spec approval and the required plan review.
+- `verify` executes the command itself and derives pass/fail from the observed exit code.
+- Evidence is invalidated when relevant implementation content changes.
+- A skipped required check blocks; the default profile has no generic waiver path.
+- Plan and close review share one reviewer track; the close reviewer is read-only and cannot be the builder/session.
+- Runtime pointers are namespaced by workspace/worktree identity.
 
-```bash
-python3 harness/cli/harnessctl.py evidence --id WU-001 --claim EV1 --type test --result pass --command "pytest tests/test_login.py" --command-log-ref ".harness/work-units/active/WU-001/evidence/artifacts/pytest-login.log"
-python3 harness/cli/harnessctl.py validate --id WU-001 --strict
-python3 harness/cli/harnessctl.py check --id WU-001 --gate verification
-python3 harness/cli/harnessctl.py request-review --id WU-001 --mode close --reviewer-role reviewer-agent
-python3 harness/cli/harnessctl.py submit-review --id WU-001 --request-id <request-id> --mode close --decision PASS --reviewer-role reviewer-agent --independence-level fresh_context --evidence-ref <receipt-id>
-python3 harness/cli/harnessctl.py ci --strict
-python3 harness/cli/harnessctl.py handoff --id WU-001 --next-safe-action "Open PR with evidence receipt ev-..."
-```
-
-## Adoption profiles
-
-Use `scripts/adopt.py install` to install the harness into a target repository:
+## Quick start
 
 ```bash
-python3 scripts/adopt.py install /path/to/repo --profile codex
-python3 scripts/adopt.py install /path/to/repo --profile claude
+python3 harness/cli/harnessctl.py new \
+  --id WU-001 --title "Add bounded behavior" --type feature --risk medium
+
+# Clarify and edit docs/spec/WU-001.md, then record the user's approval.
+python3 harness/cli/harnessctl.py approve-spec \
+  --id WU-001 --approved-by human:owner --approval-ref issue:123
+
+# Fill .harness/work-units/active/WU-001/plan.md.
+python3 harness/cli/harnessctl.py request-review \
+  --id WU-001 --mode plan --reviewer-id reviewer-1 --reviewer-session review-plan-1 \
+  --planner-id planner-1 --planner-session planner-session-1
+python3 harness/cli/harnessctl.py submit-review \
+  --id WU-001 --mode plan --request-id <RR-ID> --decision PASS \
+  --reviewer-id reviewer-1 --reviewer-session review-plan-1
+
+# Start the isolated worker only after the plan verdict passes.
+python3 harness/cli/harnessctl.py start-work \
+  --id WU-001 --builder-id worker-1 --builder-session worker-session-1
+
+# Controller-observed TDD / final verification.
+python3 harness/cli/harnessctl.py verify \
+  --id WU-001 --claim EV1 --phase red --expect fail -- <test-command>
+python3 harness/cli/harnessctl.py verify \
+  --id WU-001 --claim EV1 --phase green --expect pass -- <test-command>
+python3 harness/cli/harnessctl.py verify \
+  --id WU-001 --claim EV1 --phase final
+
+python3 harness/cli/harnessctl.py request-review \
+  --id WU-001 --mode close --reviewer-id reviewer-1 --reviewer-session review-close-1
+python3 harness/cli/harnessctl.py submit-review \
+  --id WU-001 --mode close --request-id <RR-ID> --decision PASS \
+  --reviewer-id reviewer-1 --reviewer-session review-close-1 --evidence-ref <EV-ID>
+python3 harness/cli/harnessctl.py finalize-check --id WU-001 --strict
 ```
 
-The installer is incremental: existing files are kept, `AGENTS.md`/`CLAUDE.md` receive a marked harness block when already present, installed harness-owned paths are appended to `.gitignore`, and `.harness/config.json` is initialized only when missing. Package docs such as this adoption guide, source analysis, mechanism registry, and HEB evaluation cases are not copied into target repositories.
+Use `harnessctl --help` for the complete command surface.
 
-## What this project is not
-
-It is not a universal agent platform, a mandatory directory standard, or a replacement for project-specific engineering judgment. It provides a small set of enforceable invariants and adapter examples that can be copied, removed, or thickened according to real failure traces.
-
-## Directory map
+## Repository layout
 
 ```text
-AGENTS.md                       Codex-oriented concise project map
-CLAUDE.md                       Claude Code concise project map
-.codex/                         Codex adapter examples: config, hooks, minimal worker/reviewer agents
-.claude/                        Claude Code adapter examples: settings, hooks, minimal worker/reviewer agents, skills
-.github/workflows/              Portable CI checks for the harness itself
-.githooks/                      Optional local Git hooks
-harness/cli/harnessctl.py       Small controller CLI, including validate/spec/scope/verification/review/ci/archive/skills gates
-harness/hooks/                  Deterministic guard and lifecycle hook scripts
-harness/schemas/                JSON schemas for Work Units, evidence, reviews, waivers
-harness/templates/              Contract, handoff, review, waiver templates
-harness/tests/                  Controller tests
-skills/                         Platform-neutral skill catalog
-scripts/                        Repository adoption and maintenance scripts
-docs/harness/                   Source analysis, workflow, adapters, HEB evaluation docs
-examples/                       Example Work Unit and policy files
+skills/                     canonical task-routed skills
+.agents/skills/             Codex project skill mirror
+.claude/skills/             Claude Code project skill mirror
+harness/cli/harnessctl.py   lifecycle controller
+harness/hooks/              narrow routing and policy hooks
+harness/templates/          tracked spec and local plan templates
+harness/schemas/            receipt/review/state schemas
+docs/harness/               implementation documentation
+docs/spec/                  tracked feature specifications
+scripts/adopt.py             incremental installer
 ```
 
-## Core loop
+## Validate this harness
 
-```text
-Clarify -> Specify Work Unit -> Route Context -> Execute with TDD -> Capture Evidence -> Review -> Handoff -> Compound or Prune
+```bash
+make test
+make ci
+make check
 ```
 
-The controller does not try to judge product quality. It blocks only deterministic failures such as invalid harness artifacts, missing contracts, stale evidence, obvious scope violations, builder-authored close reviews, and high-risk work without independent review or human gate.
+The default implementation intentionally omits schedulers, generic waiver machinery, resident planner/explorer agents, stop-blocking hooks, and tracked runtime ledgers. Add a mechanism only when a real failure trace proves its benefit.

@@ -23,13 +23,13 @@ task:
 required_evidence:
   - id: EV1
     type: targeted_test
-    description: "Run the relevant test or explain a waiver."
+    description: "Run the relevant test through the controller; a skipped check remains blocking."
 fault_injection: []
 expected_process:
-  - "Use Work Unit Contract before implementation."
+  - "Read and approve the tracked feature spec before implementation."
   - "Record fresh evidence before completion."
 hard_gates:
-  - "No completion without evidence or waiver."
+  - "No completion without fresh controller-observed evidence."
 metrics:
   outcome: true
   process: true
