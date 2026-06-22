@@ -13,7 +13,7 @@ Do not implement product code during this skill.
 4. Ask one high-value question at a time. Offer concrete options and a recommendation when useful.
 5. After each answer, update the decision frontier and check whether the repository can answer the next gap.
 6. Surface conflicts between requested intent and current code/docs instead of silently choosing.
-7. Finish with a compact confirmed summary for `harness-spec`.
+7. Finish with a compact confirmed summary for `harness-spec`, update the single tracked Spec draft, and stop at explicit Spec approval. Do not implement or silently begin planning.
 
 Ready summary:
 

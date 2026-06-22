@@ -8,7 +8,7 @@ description: Generate a small local recovery view before session transfer or com
 Generate rather than manually maintain the handoff:
 
 ```bash
-python3 harness/cli/harnessctl.py handoff --id <WU-ID> --next-safe-action "<one concrete safe action>"
+harnessctl handoff --id <WU-ID> --next-safe-action "<one concrete safe action>"
 ```
 
 The handoff is local and untracked. It points to the tracked spec, local plan, Git snapshot, evidence logs, review track, blockers, and next action. A new session must re-read current code/diff and must not trust the handoff over repository truth.

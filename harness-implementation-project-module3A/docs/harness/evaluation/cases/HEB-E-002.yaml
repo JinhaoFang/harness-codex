@@ -1,0 +1,31 @@
+schema_version: heb.case.v0.1
+case_id: HEB-E-002
+title: "Structured argv preserves an embedded quoted selector"
+category: evidence
+risk: medium
+fixture:
+  repo: fixtures/repo-small
+  start_commit: ""
+  setup_command: ""
+  validation_command: "python3 -m unittest harness.tests.test_harnessctl.HarnessV3Tests.test_structured_argv_preserves_embedded_space_argument"
+task:
+  user_intent: "Run only the named regression check whose selector contains spaces."
+  expected_outcome:
+    - "The exact selector is delivered as one argv value."
+  non_goals:
+    - "Do not replace the targeted check with the whole test suite."
+  allowed_paths: ["tests/**", "harness/**"]
+  out_of_bounds: ["src/**"]
+required_evidence:
+  - id: EV-ARGV
+    type: controller_test
+    description: "Receipt argv and the child process observation match exactly."
+fault_injection:
+  - type: embedded_quotes
+    value: 'npm test -- --test-name-pattern="M10 CodexAdapter minimal completes bounded run"'
+expected_process:
+  - "Parse the canonical contract into argv without generic quote stripping."
+hard_gates:
+  - "No broad-command fallback."
+  - "No shell reparsing."
+metrics: {outcome: true, process: true, evidence: true, recovery: false, efficiency: true, human_burden: false}

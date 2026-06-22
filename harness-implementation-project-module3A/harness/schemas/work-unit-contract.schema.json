@@ -1,0 +1,366 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Harness Work Unit Contract",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "id",
+    "title",
+    "type",
+    "risk",
+    "approval",
+    "intent",
+    "expected_outcomes",
+    "non_goals",
+    "scope",
+    "required_evidence",
+    "verification",
+    "stop_conditions",
+    "clarification",
+    "open_questions",
+    "context_pointers",
+    "delivery",
+    "risk_notes"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "harness.work_unit_contract.v3"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "type": {
+      "enum": [
+        "feature",
+        "bugfix",
+        "refactor",
+        "migration",
+        "docs",
+        "test",
+        "release",
+        "security",
+        "research",
+        "other"
+      ]
+    },
+    "risk": {
+      "enum": [
+        "trivial",
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ]
+    },
+    "approval": {
+      "type": "object",
+      "required": [
+        "status",
+        "approved_by",
+        "approved_at",
+        "approval_ref",
+        "approved_content_hash"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "draft",
+            "approved"
+          ]
+        },
+        "approved_by": {
+          "type": "string"
+        },
+        "approved_at": {
+          "type": "string"
+        },
+        "approval_ref": {
+          "type": "string"
+        },
+        "approved_content_hash": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "intent": {
+      "type": "string",
+      "minLength": 1
+    },
+    "expected_outcomes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "non_goals": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "likely_changed_areas",
+        "write_boundary",
+        "out_of_bounds"
+      ],
+      "properties": {
+        "likely_changed_areas": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "write_boundary": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "out_of_bounds": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "required_evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "claim",
+          "check_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "claim": {
+            "type": "string",
+            "minLength": 1
+          },
+          "check_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "verification": {
+      "type": "object",
+      "required": [
+        "checks"
+      ],
+      "properties": {
+        "checks": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "runner",
+                  "argv",
+                  "cwd",
+                  "timeout_seconds"
+                ],
+                "properties": {
+                  "runner": {
+                    "const": "exec"
+                  },
+                  "argv": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "cwd": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "timeout_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 7200
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": [
+                  "runner",
+                  "script",
+                  "allow_shell",
+                  "cwd",
+                  "timeout_seconds"
+                ],
+                "properties": {
+                  "runner": {
+                    "const": "shell"
+                  },
+                  "shell": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "script": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "allow_shell": {
+                    "const": true
+                  },
+                  "cwd": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "timeout_seconds": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 7200
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "stop_conditions": {
+      "type": "object",
+      "required": [
+        "success",
+        "blocked"
+      ],
+      "properties": {
+        "success": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "blocked": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "clarification": {
+      "type": "object",
+      "required": [
+        "user_confirmed",
+        "repo_grounded",
+        "key_decisions",
+        "remaining_assumptions"
+      ],
+      "properties": {
+        "user_confirmed": {
+          "type": "boolean"
+        },
+        "repo_grounded": {
+          "type": "boolean"
+        },
+        "key_decisions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "remaining_assumptions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "context_pointers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "required": [
+        "issue",
+        "branch",
+        "pull_request"
+      ],
+      "properties": {
+        "issue": {
+          "type": "string"
+        },
+        "branch": {
+          "type": "string"
+        },
+        "pull_request": {
+          "type": "string"
+        },
+        "required_checks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
+    "risk_notes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "additionalProperties": false
+}

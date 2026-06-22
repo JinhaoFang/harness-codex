@@ -1,34 +1,41 @@
 ---
 name: harness-tdd
-description: Implement an approved plan through behavior-first RED/GREEN/refactor slices using controller-executed verification. Use for bug fixes, features, interfaces, schemas, errors, permissions, or lifecycle behavior.
+description: Implement an approved plan through behavior-first RED/GREEN/refactor slices using controller-executed verification, then route directly to Close Review when evidence is complete.
 ---
 
 # Harness TDD
 
-Prerequisites: approved tracked spec, passing plan review, and `harnessctl start-work`.
+Prerequisites: approved tracked Spec, passing Plan Review, and a controller-bound isolated Worker.
 
 For each behavior slice:
 
-1. Write one externally observable test.
-2. State the **expected reason** the old implementation should fail.
-3. Run RED through `harnessctl verify` and inspect output to confirm the observed failure matches that expected reason:
+1. Write an externally observable test inside the reviewed test surface.
+2. Run the declared RED check through the controller and inspect that it fails for the **expected reason**, not syntax, import, environment, or “no tests found” failure.
 
 ```bash
-python3 harness/cli/harnessctl.py verify --id <WU-ID> --claim <EV-ID> --phase red --expect fail -- <targeted-command>
+harnessctl verify --id <WU-ID> --claim <EV-ID> --phase red
 ```
 
-4. Implement the smallest vertical slice inside the approved write boundary.
-5. Run GREEN:
+3. Implement the smallest vertical slice inside the approved write boundary.
+4. Run GREEN, refactor only while GREEN, and rerun affected checks.
 
 ```bash
-python3 harness/cli/harnessctl.py verify --id <WU-ID> --claim <EV-ID> --phase green --expect pass -- <targeted-command>
+harnessctl verify --id <WU-ID> --claim <EV-ID> --phase green
 ```
 
-6. Refactor only while green and rerun affected commands.
-7. Run final or broader evidence for every required claim:
+5. Produce fresh final evidence for every required claim, and make sure the final evidence matches the acceptance level planned in `acceptance_evidence`. RED/GREEN alone do not prove completion if the final user-visible outcome needs a broader check.
 
 ```bash
-python3 harness/cli/harnessctl.py verify --id <WU-ID> --claim <EV-ID> --phase final
+harnessctl verify --id <WU-ID> --claim <EV-ID> --phase final
 ```
 
-A RED receipt proves only that the command exited non-zero as expected; the worker/reviewer must still verify the failure reason. RED never satisfies completion. If the test cannot express the behavior, return to the plan rather than weakening the assertion.
+6. Do not pause merely because implementation ended. For Codex, resume the same native reviewer subagent from Plan Review; for Claude/manual adapter flows, invoke `advance` so the exact Reviewer session performs Close Review:
+
+```bash
+harnessctl route --id <WU-ID> --platform codex
+harnessctl advance --id <WU-ID> --platform claude
+```
+
+A RED receipt never satisfies completion. When the test cannot express the behavior or the implementation needs unapproved scope, stop and return to the plan/spec instead of weakening the assertion.
+
+For Codex native orchestration details, including when to bind or resume the worker session, follow `docs/harness/codex-native-subagents.md`.

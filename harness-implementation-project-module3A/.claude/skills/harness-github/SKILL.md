@@ -1,19 +1,24 @@
 ---
 name: harness-github
-description: Connect an approved Work Unit to Git branches, issues, commits, pull requests, CI, and human review without creating a second task ledger. Use when collaboration or integration leaves the local session.
+description: Bind an approved Work Unit to Git branches, issues, pull requests, CI checks, and human integration without creating a second task ledger.
 ---
 
 # Harness GitHub
 
-Git/GitHub are first-class execution and integration surfaces. They do not replace the tracked spec or controller-executed verification.
+Git/GitHub are execution and integration truth. They do not replace the tracked Spec, controller evidence, or Close Review.
 
-- Use one branch/worktree per implementation Work Unit.
-- Name the branch with the Work Unit or issue id.
-- Keep commits bounded and reviewable.
-- Put rationale and observable behavior before trace metadata in issue/PR bodies.
-- Link the tracked `docs/spec/<WU-ID>.md` when useful.
-- Report exact verification commands and CI run links.
-- Do not open implementation PRs before plan approval.
-- Do not change reviewed implementation during integration without returning to build, verification, and close review.
+- Use one implementation Work Unit per branch/worktree and keep commits behavior-bounded and reviewable.
+- Link issue/PR references and exact required check names through the controller:
 
-The local `.harness` directory is intentionally untracked. After it is removed, reconstruct progress from the tracked spec, branch/commits/diff, issue/PR/CI state, and current code/tests.
+```bash
+harnessctl delivery-link \
+  --id <WU-ID> --issue <ISSUE> --branch <BRANCH> --pull-request <PR> \
+  --required-check test --required-check lint
+harnessctl github-sync --id <WU-ID>
+harnessctl check --id <WU-ID> --gate delivery --strict
+```
+
+- The delivery gate verifies PR HEAD equals local HEAD and each declared check is successful.
+- Do not treat a generic green CI run as evidence for a claim it does not cover.
+- Any implementation change after Close Review returns to evidence and review.
+- `.harness/` stays untracked; recovery uses the tracked Spec, Git/GitHub, and current code.

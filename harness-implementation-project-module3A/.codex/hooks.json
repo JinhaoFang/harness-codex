@@ -1,5 +1,29 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/harness/hooks/context_router.py\" SessionStart --platform codex",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/harness/hooks/context_router.py\" SubagentStart --platform codex",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
     "PreCompact": [
       {
         "matcher": "manual|auto",
@@ -18,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/harness/hooks/context_router.py\" PostCompact",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/harness/hooks/context_router.py\" PostCompact --platform codex",
             "timeout": 30
           }
         ]
@@ -30,6 +54,18 @@
           {
             "type": "command",
             "command": "python3 \"$(git rev-parse --show-toplevel)/harness/hooks/session_end_handoff_check.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/harness/hooks/pre_tool_use_policy.py\" --platform codex",
             "timeout": 30
           }
         ]

@@ -69,3 +69,73 @@ mechanisms:
     known_cost: "Canonical and platform mirrors require synchronization."
     removal_condition: "Merge or delete unused/duplicated skills; replace when platform-native workflows are clearer."
     status: active
+
+  - mechanism: structured-check-argv
+    type: controller-check
+    purpose: "Preserve exact command arguments, including embedded quotes and spaces, without shell reparsing."
+    failure_mode: "A generic scalar cleaner strips a closing quote and forces a targeted check to degrade into a broad command."
+    protected_invariant: "Declared evidence is executed exactly and observably."
+    validation_method: "Embedded-space/quote round-trip regression and package test suite."
+    known_cost: "Specs must maintain explicit check definitions instead of convenient shell snippets."
+    removal_condition: "Replace only if another typed command representation provides equivalent shell-free execution."
+    status: active
+
+  - mechanism: thin-platform-dispatcher
+    type: controller-check
+    purpose: "Execute valid lifecycle transitions and bind real Codex/Claude sessions without a resident scheduler."
+    failure_mode: "The state machine only prints next steps, agents pause between normal phases, or reviewer continuity is a self-attested string."
+    protected_invariant: "Automatic work remains state/hash gated and Plan/Close Review resume one real logical session."
+    validation_method: "Adapter command/resume tests, dry-run transition tests, and platform smoke tests."
+    known_cost: "Depends on current platform CLI capabilities; actual CLI smoke tests are environment-specific."
+    removal_condition: "Remove if both platforms expose an equivalent controller-bound dispatcher with auditable session identity."
+    status: active
+
+  - mechanism: codex-persisted-goal-binding
+    type: controller-check
+    purpose: "Bind an approved Work Unit to Codex's actual thread-scoped Goal while keeping Controller acceptance authoritative."
+    failure_mode: "A long-running worker only receives Goal-like prose, loses its objective across continuation, or Goal completion is mistaken for evidence."
+    protected_invariant: "Platform execution state can aid continuity but cannot replace contract, evidence, review, or risk authority."
+    validation_method: "Fake app-server protocol regression plus environment-specific adapter smoke test."
+    known_cost: "One short-lived app-server bootstrap and a local binding record; platform Goal failures require visible degraded fallback."
+    removal_condition: "Remove if codex exec gains first-class programmatic Goal creation with equivalent persisted thread identity and audit output."
+    status: active
+
+  - mechanism: single-repo-snapshot
+    type: controller-check
+    purpose: "Capture Git branch/head/diff/workspace once per decision and separate repository from worktree identity."
+    failure_mode: "Repeated Git subprocesses cause slow or inconsistent gates; linked worktrees collide or appear to be different repositories."
+    protected_invariant: "One transition evaluates one coherent repository snapshot."
+    validation_method: "Full-suite timing and linked-worktree identity regression."
+    known_cost: "Snapshot contents can become stale if retained across a later mutation; callers must capture per transition."
+    removal_condition: "Replace if a lower-cost Git library provides an atomic equivalent snapshot."
+    status: active
+
+  - mechanism: github-delivery-gate
+    type: controller-check
+    purpose: "Bind optional PR/CI integration to the current local HEAD and explicitly named required checks."
+    failure_mode: "A reviewed local diff is archived while the PR points to another commit or required CI is missing/failing."
+    protected_invariant: "Integration state is current and does not silently substitute for claim evidence."
+    validation_method: "PR-head and required-check regression tests."
+    known_cost: "Requires gh and exact check-name configuration only when a PR is linked."
+    removal_condition: "Remove if branch protection/CI evidence import supplies the same deterministic local gate."
+    status: active
+
+  - mechanism: adoption-ownership-manifest
+    type: workflow
+    purpose: "Upgrade generated Harness assets without overwriting repository-owned modifications."
+    failure_mode: "Incremental installation silently keeps obsolete files forever or an upgrade overwrites local changes."
+    protected_invariant: "Harness evolution is reversible and conflicts are visible."
+    validation_method: "Install, successful upgrade, and local-conflict tests."
+    known_cost: "One small tracked hash manifest; repository-owned conflicting files remain unmanaged."
+    removal_condition: "Replace when a native package/template manager provides equivalent ownership and conflict semantics."
+    status: active
+
+  - mechanism: deterministic-release-package
+    type: ci
+    purpose: "Make the delivered zip reproducible, self-verifying, and free of ignored runtime/cache state."
+    failure_mode: "A hand-made archive contains stale .harness state, pyc files, or assets from another source revision."
+    protected_invariant: "The distributed Harness can be reconstructed and verified from its manifest."
+    validation_method: "Byte-for-byte package determinism, SHA-256 manifest, clean extraction, tests and controller gates."
+    known_cost: "Release verification runs the complete test suite in a temporary extraction."
+    removal_condition: "Replace if a signed release pipeline provides equal or stronger reproducibility and clean-room checks."
+    status: active

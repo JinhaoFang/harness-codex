@@ -1,37 +1,71 @@
 # Technical Plan: {{id}} — {{title}}
 
-> Local intermediate artifact. This file lives under `.harness/` and is rebuilt from the tracked spec, Git/GitHub, and current code when necessary.
+> Local, ignored intermediate artifact. The marked JSON block is controller-readable; reviewer notes outside it are optional context.
 
-## Repository grounding
+<!-- harness:execution-plan:start -->
+```json
+{
+  "schema_version": "harness.execution_plan.v2",
+  "work_unit_id": "{{id}}",
+  "title": "{{title}}",
+  "repository_grounding": [
+    "TBD: Code, tests, runtime behavior, and local rules inspected."
+  ],
+  "architecture_and_tradeoffs": "TBD: Chosen design, rejected alternatives, and why this is the smallest appropriate change.",
+  "change_map": [
+    {
+      "path": "TBD",
+      "change": "TBD",
+      "reason": "TBD"
+    }
+  ],
+  "behavior_slices": [
+    {
+      "id": "B1",
+      "claim_ref": "EV1",
+      "behavior": "TBD",
+      "test_paths": [
+        "TBD"
+      ],
+      "oracle": "TBD: Explain why this assertion fails on old behavior and passes only on the required behavior.",
+      "red": {
+        "check_id": "check.ev1",
+        "expected_failure": {
+          "kind": "exit_nonzero",
+          "combined_regex": [
+            "TBD"
+          ]
+        }
+      },
+      "green": {
+        "check_id": "check.ev1"
+      },
+      "allowed_paths": [
+        "TBD"
+      ]
+    }
+  ],
+  "acceptance_evidence": [
+    {
+      "claim_ref": "EV1",
+      "check_id": "check.ev1",
+      "level": "functional",
+      "justification": "TBD: Explain why this final check proves the user-visible outcome rather than only an internal implementation detail."
+    }
+  ],
+  "verification_notes": [
+    "TBD"
+  ],
+  "risks_and_replan_conditions": [
+    "TBD"
+  ],
+  "reviewer_focus": [
+    "TBD"
+  ]
+}
+```
+<!-- harness:execution-plan:end -->
 
-- TBD: Relevant code, tests, runtime behavior, local rules, and constraints inspected.
+## Reviewer notes
 
-## Architecture and tradeoffs
-
-TBD: Describe the chosen design, alternatives considered, and why this is the smallest appropriate approach.
-
-## Change map
-
-- TBD: File/module → intended change → why it is required.
-
-## TDD behavior slices
-
-- id: B1
-  claim_ref: EV1
-  behavior: TBD
-  red_command: TBD
-  expected_red_reason: TBD
-  green_command: TBD
-  allowed_paths: TBD
-
-## Verification
-
-- TBD: Required claim IDs, commands, environments, and broader regression checks.
-
-## Risks and replan conditions
-
-- TBD: Conditions that require stopping, revising the spec, or requesting another plan review.
-
-## Reviewer focus
-
-- TBD: Assumptions, architecture risks, and close-review checks that the same reviewer should revisit.
+Add code anchors, rejected alternatives, and implementation discoveries here.

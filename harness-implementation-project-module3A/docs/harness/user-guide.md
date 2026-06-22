@@ -3,130 +3,109 @@
 ## Storage model
 
 ```text
-docs/spec/<WU-ID>.md                       tracked intent and approval metadata
+docs/spec/<WU-ID>.md                       tracked intent and approval
 .harness/work-units/active/<WU-ID>/        ignored local execution state
   plan.md                                  local technical design
-  state.json                               phase, identity and Git snapshot
-  evidence/receipts.jsonl                  small evidence index
+  state.json                               lifecycle and Git/workspace snapshot
+  evidence/receipts.jsonl                  evidence index
   evidence/artifacts/*.log                 command output
-  reviews/track.json                       persistent reviewer lineage
-  reviews/requests/*.json                  review input snapshots
+  reviews/track.json                       persistent Reviewer lineage
+  reviews/requests/*.json                  immutable review inputs
   reviews/verdicts/*.json                  judgments
-  handoff.md                               local recovery view
-.harness/runtime/<workspace-id>/current    workspace-local active pointer
+  recovery/checkpoint.json                 controller checkpoint
+  handoff.md                               derived recovery view
+.harness/runtime/<workspace-id>/<session>/current
+.harness-adoption.json                     tracked installation ownership hashes
 ```
 
-The local directory is deliberately disposable. It is useful for session continuity, but the safe recovery substrate is the tracked spec plus current Git/GitHub/code.
-
-## Main command sequence
+## Automated command sequence
 
 ```bash
-# Create draft spec and local runtime.
 harnessctl new --id WU-123 --title "..." --type feature --risk medium
-
-# Validate and approve the user-visible spec.
+# Edit and walk through docs/spec/WU-123.md.
 harnessctl check --id WU-123 --gate spec --strict
 harnessctl approve-spec --id WU-123 --approved-by human:owner --approval-ref issue:123
-
-# Complete local plan, then request/submit plan review.
+# Edit the local plan, then let Codex route native reviewer/worker subagents.
 harnessctl check --id WU-123 --gate plan --strict
-harnessctl request-review --id WU-123 --mode plan --reviewer-id rev-1 --reviewer-session rev-plan-1 --planner-id planner-1 --planner-session plan-1
-harnessctl submit-review --id WU-123 --mode plan --request-id <RR> --decision PASS \
-  --reviewer-id rev-1 --reviewer-session rev-plan-1
+harnessctl route --id WU-123 --platform codex
+```
 
-# Start worker and verify actual commands.
-harnessctl start-work --id WU-123 --builder-id worker-1 --builder-session build-1
-harnessctl verify --id WU-123 --claim EV1 --phase red --expect fail -- <command>
-harnessctl verify --id WU-123 --claim EV1 --phase green --expect pass -- <command>
+For Codex, `route` reports the next native reviewer/worker action and the controller commands that must accompany it. For Claude, `advance` performs all currently valid automatic transitions; use `advance --dry-run` or `route` to inspect without execution.
+
+## Manual control surface
+
+```bash
+# Plan review. Capture and reuse one logical reviewer session.
+harnessctl request-review --id WU-123 --mode plan \
+  --reviewer-id rev-1 --reviewer-session review-session-1 \
+  --planner-id planner-1 --planner-session plan-session-1
+harnessctl submit-review --id WU-123 --mode plan --request-id <RR> \
+  --decision PASS --reviewer-id rev-1 --reviewer-session review-session-1
+
+# Worker and evidence.
+harnessctl start-work --id WU-123 --builder-id worker-1 --builder-session worker-session-1
+harnessctl verify --id WU-123 --claim EV1 --phase red
+harnessctl verify --id WU-123 --claim EV1 --phase green
 harnessctl verify --id WU-123 --claim EV1 --phase final
 
-# Same reviewer lineage closes the work from a separate session.
-harnessctl request-review --id WU-123 --mode close --reviewer-id rev-1 --reviewer-session rev-close-1
-harnessctl submit-review --id WU-123 --mode close --request-id <RR> --decision PASS \
-  --reviewer-id rev-1 --reviewer-session rev-close-1 --evidence-ref <EV>
+# Close review resumes the same logical session, not a new alias.
+harnessctl request-review --id WU-123 --mode close \
+  --reviewer-id rev-1 --reviewer-session review-session-1
+harnessctl submit-review --id WU-123 --mode close --request-id <RR> \
+  --decision PASS --reviewer-id rev-1 --reviewer-session review-session-1 \
+  --evidence-ref <EV>
 harnessctl finalize-check --id WU-123 --strict
 ```
 
-Run through `python3 harness/cli/harnessctl.py` when `harnessctl` is not installed on `PATH`.
-
-## Commands
+## Important commands
 
 | Command | Purpose |
 |---|---|
-| `init` | initialize ignored local runtime and `.gitignore` entry |
-| `new` | create tracked draft spec and local plan/runtime |
-| `resume` | reconstruct a safe local runtime from a tracked spec |
-| `status`, `brief`, `list` | inspect current local state |
-| `approve-spec` | record human approval in the tracked spec and local state |
-| `amend` | approve changed spec content; material changes invalidate plan review |
-| `check` | run one deterministic gate |
-| `request-review`, `submit-review` | maintain the plan/close reviewer track |
-| `start-work` | bind builder identity/session and enter implementation |
-| `verify` | execute a command and derive evidence from observation |
-| `record-skipped` | record a missing check and block the task |
-| `resume-work` | re-enter implementation from handoff/blocked after current spec and plan gates pass |
-| `finalize-check` | combine spec, scope, verification and close-review gates |
-| `handoff` | generate local recovery information |
-| `archive` | archive local runtime; tracked spec remains |
-| `ci` | validate tracked specs and installed skill mirrors |
-| `doctor` | inspect installation shape |
+| `new` | create tracked draft Spec and ignored runtime |
+| `approve-spec`, `amend` | record accountable intent approval/change |
+| `advance` | Claude/manual adapter path: execute valid Plan Review → Worker → Close Review → final gate transitions |
+| `route` | report one next transition; for Codex this is the primary native-subagent routing surface |
+| `dispatch-review`, `dispatch-worker` | Claude/manual adapter path: invoke one platform role and capture its real session ID |
+| `reviewer-takeover` | explicitly replace an unrecoverable Reviewer and reset review generation |
+| `bind-session` | bind a native platform session so controller review/worker gates can trust it |
+| `verify` | execute an approved structured check and record observed evidence |
+| `delivery-link`, `github-sync` | bind PR/check references and capture GitHub state |
+| `resume-session` | continue existing local/controller session state |
+| `reconstruct` | conservatively rebuild runtime after `.harness` loss |
+| `checkpoint`, `handoff` | create recovery state/view |
+| `workspace-check`, `workspace-create` | enforce or create Work Unit worktree isolation |
+| `finalize-check`, `archive` | run acceptance/archive gates |
+| `adapter-doctor`, `doctor`, `ci` | validate platform and repository installation |
 
-## Spec amendments
-
-A manual edit to approved spec content invalidates the approval hash. Use:
-
-```bash
-harnessctl amend --id WU-123 \
-  --reason "Requirement changed" --summary "Add observable behavior X" \
-  --actor human:owner --approval-ref issue:123#comment-4
-```
-
-Every approved spec-content change is treated as material: it returns the lifecycle to `spec_approved`, clears plan approval, and requires a fresh plan review. This deliberately avoids a weak “context-only” escape hatch that could silently change intent.
+When `harnessctl` is not installed globally, vendored repositories can use the repo-local `./harnessctl` wrapper. Thin shared repositories expect an externally installed `harnessctl`.
 
 ## Evidence rules
 
-- `verify` takes an argv after `--`; it does not use a shell by default.
-- `--expect pass` requires exit code 0.
-- `--expect fail` requires a non-zero exit code and is intended for TDD RED observation.
-- The controller captures command logs under `.harness/`.
-- Any implementation-content change makes prior receipts stale.
-- A skipped record is not evidence and cannot satisfy completion.
+- The approved contract owns the command as structured `argv[]`.
+- Optional argv after `verify ... --` must exactly match the contract.
+- `red` requires nonzero exit plus the plan's expected failure signature.
+- `green` is useful during a slice; only fresh `final` evidence satisfies completion.
+- Any relevant implementation change invalidates prior receipts.
+- `record-skipped` is a blocker/observation, never a pass or waiver.
 
 ## Reviewer rules
 
-- Plan and close modes are the default review surface.
-- The reviewer identity that owns the plan track must normally own close review.
-- A different reviewer requires an explicit future takeover mechanism; the default CLI rejects silent replacement.
-- Close review cannot use the builder identity/session.
-- Reviewer findings go back to the worker; reviewer does not edit product code.
-- Medium+ close review cites current receipt IDs.
+- Reviewer is read-only and separate from planner/builder.
+- Plan and Close Review use one logical platform session.
+- Close Review directly inspects the current repository, diff, tests, and receipts.
+- A silent session replacement is rejected.
+- High/critical work can add fresh specialist review or a human gate.
 
-## Optional phase write policy
+## GitHub delivery
 
-The repository includes optional hook helpers for phase/path policy if a project wants stronger platform-level enforcement than the default installed hook surface:
-
-| Phase | Writable surface |
-|---|---|
-| `clarifying` | current tracked spec only |
-| `spec_approved`, `planning`, `plan_reviewing` | tracked spec and local plan only |
-| `ready` | no product edit until `start-work` |
-| `running` onward | approved write boundary; spec/plan changes require stopping |
-| reviewer role | read-only |
-
-These hooks are defense-in-depth only. The default installed adapters keep the hook surface to `PreCompact`, `PostCompact`, and `Stop`; CI, sandbox, permissions and branch protection remain necessary for high-risk boundaries.
+The Spec's `delivery.required_checks` lists exact GitHub check names. `github-sync` captures PR head and normalized check outcomes with `gh`; `check --gate delivery` fails when the local and PR heads differ or a required check is absent/pending/failing. No PR means no GitHub burden unless required checks were configured.
 
 ## Recovery
 
-`.harness/runtime/<workspace-id>/current` avoids one repository-global pointer across worktrees. A session brief always re-reads the spec and current Git/code.
+`resume-session` requires the local runtime to exist. `reconstruct` reads the tracked Spec and current Git/code, creates a new empty local plan/runtime, and refuses to restore old evidence or verdicts from narrative memory.
 
-When a local handoff or blocker exists, `resume-work` rechecks the approved spec and plan review, then binds a fresh worker session before product writes are enabled again. There is no generic state setter.
+The pre-compaction hook writes a fresh checkpoint automatically. Session-start context is a short pointer to authoritative artifacts, not a copied task history.
 
-When `.harness` is unavailable, `resume`:
+## Archive override
 
-1. reads `docs/spec/<WU-ID>.md`;
-2. verifies its approval marker/content hash;
-3. recreates local state and an empty plan template;
-4. does not claim old evidence or review survived;
-5. directs the agent to rebuild and review the plan.
-
-This is deliberate recovery, not exact replay.
+`archive --force` is not an anonymous bypass. It requires a reason, `human:<identity>`, and durable approval reference, and records an `archive-override.json` judgment.

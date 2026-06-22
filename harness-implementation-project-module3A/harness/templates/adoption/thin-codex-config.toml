@@ -1,0 +1,10 @@
+# Thin shared profile: keep project-level sandbox defaults, but route the
+# harness controller and hooks through an externally installed harnessctl.
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[features]
+hooks = true
+
+[tools]
+web_search = true

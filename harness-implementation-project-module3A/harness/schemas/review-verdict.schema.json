@@ -6,42 +6,47 @@
     "schema_version",
     "review_id",
     "request_id",
-    "review_track_id",
     "work_unit_id",
     "mode",
+    "decision",
+    "review_track_id",
+    "review_track_generation",
     "reviewer_id",
     "reviewer_session_id",
+    "logical_reviewer_session_id",
     "planner_id",
     "planner_session_id",
     "builder_id",
     "builder_session_id",
     "independence_level",
     "is_independent",
-    "decision",
     "approval_ref",
     "reviewed_spec_hash",
     "reviewed_plan_hash",
+    "reviewed_head_commit",
     "reviewed_implementation_diff_hash",
     "evidence_refs",
     "findings",
     "required_rework",
+    "re_grounded_on_close",
+    "read_only_attestation",
     "created_at"
   ],
   "properties": {
     "schema_version": {
-      "const": "harness.review_verdict.v3"
+      "const": "harness.review_verdict.v4"
     },
     "review_id": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "request_id": {
-      "type": "string"
-    },
-    "review_track_id": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "work_unit_id": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "mode": {
       "enum": [
@@ -49,16 +54,39 @@
         "close"
       ]
     },
-    "reviewer_id": {
-      "type": "string"
+    "decision": {
+      "enum": [
+        "PASS",
+        "CHANGES_REQUESTED",
+        "REJECTED",
+        "BLOCKED",
+        "NEEDS_HUMAN_GATE"
+      ]
     },
-    "reviewer_identity_source": {
-      "type": "string"
+    "review_track_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "review_track_generation": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "reviewer_id": {
+      "type": "string",
+      "minLength": 1
     },
     "reviewer_session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "logical_reviewer_session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "planner_id": {
       "type": "string"
     },
-    "reviewer_session_source": {
+    "planner_session_id": {
       "type": "string"
     },
     "builder_id": {
@@ -78,19 +106,16 @@
     "is_independent": {
       "type": "boolean"
     },
-    "decision": {
-      "enum": [
-        "PASS",
-        "CHANGES_REQUESTED",
-        "REJECTED",
-        "BLOCKED",
-        "NEEDS_HUMAN_GATE"
-      ]
+    "approval_ref": {
+      "type": "string"
     },
     "reviewed_spec_hash": {
       "type": "string"
     },
     "reviewed_plan_hash": {
+      "type": "string"
+    },
+    "reviewed_head_commit": {
       "type": "string"
     },
     "reviewed_implementation_diff_hash": {
@@ -114,17 +139,15 @@
         "type": "string"
       }
     },
+    "re_grounded_on_close": {
+      "type": "boolean"
+    },
+    "read_only_attestation": {
+      "type": "boolean"
+    },
     "created_at": {
       "type": "string"
-    },
-    "approval_ref": {
-      "type": "string"
-    },
-    "planner_id": {
-      "type": "string"
-    },
-    "planner_session_id": {
-      "type": "string"
     }
-  }
+  },
+  "additionalProperties": false
 }

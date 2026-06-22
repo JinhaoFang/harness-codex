@@ -11,14 +11,21 @@
     "observation",
     "type",
     "phase",
+    "check_id",
+    "check_definition_hash",
+    "runner",
     "command",
     "argv",
+    "cwd",
     "expected_outcome",
     "observed_outcome",
     "result",
+    "mismatch_reasons",
     "started_at",
     "ended_at",
+    "duration_seconds",
     "exit_code",
+    "repository_id",
     "base_commit",
     "head_commit",
     "branch",
@@ -36,15 +43,21 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "harness.evidence_receipt.v3"
+      "const": "harness.evidence_receipt.v4"
     },
     "receipt_id": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "work_unit_id": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "claim_ref": {
+      "type": "string",
+      "minLength": 1
+    },
+    "behavior_ref": {
       "type": "string"
     },
     "actor": {
@@ -57,18 +70,33 @@
     },
     "observation": {
       "enum": [
-        "controller_executed_command",
+        "controller_executed_check",
         "skipped_not_evidence"
       ]
     },
     "type": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "phase": {
       "enum": [
         "red",
         "green",
         "final"
+      ]
+    },
+    "check_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "check_definition_hash": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runner": {
+      "enum": [
+        "exec",
+        "shell"
       ]
     },
     "command": {
@@ -80,11 +108,18 @@
         "type": "string"
       }
     },
+    "cwd": {
+      "type": "string",
+      "minLength": 1
+    },
     "expected_outcome": {
       "enum": [
-        "pass",
-        "fail"
+        "declared_red_failure",
+        "exit_zero"
       ]
+    },
+    "expected_failure": {
+      "type": "object"
     },
     "observed_outcome": {
       "enum": [
@@ -100,6 +135,12 @@
         "skipped"
       ]
     },
+    "mismatch_reasons": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
     "started_at": {
       "type": "string"
     },
@@ -107,7 +148,8 @@
       "type": "string"
     },
     "duration_seconds": {
-      "type": "number"
+      "type": "number",
+      "minimum": 0
     },
     "exit_code": {
       "type": [
@@ -115,10 +157,27 @@
         "null"
       ]
     },
+    "repository_id": {
+      "type": "string",
+      "minLength": 1
+    },
     "base_commit": {
       "type": "string"
     },
     "head_commit": {
+      "type": "string"
+    },
+    "branch": {
+      "type": "string"
+    },
+    "workspace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "spec_hash": {
+      "type": "string"
+    },
+    "plan_hash": {
       "type": "string"
     },
     "diff_hash": {
@@ -148,26 +207,18 @@
     "command_log_ref": {
       "type": "string"
     },
-    "environment_ref": {
-      "type": "string"
-    },
-    "note": {
-      "type": "string"
-    },
     "command_log_hash": {
       "type": "string"
     },
-    "spec_hash": {
+    "environment_ref": {
       "type": "string"
     },
-    "plan_hash": {
-      "type": "string"
+    "skip": {
+      "type": "object"
     },
-    "branch": {
-      "type": "string"
-    },
-    "workspace_id": {
+    "note": {
       "type": "string"
     }
-  }
+  },
+  "additionalProperties": false
 }

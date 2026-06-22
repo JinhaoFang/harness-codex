@@ -35,3 +35,15 @@ HARD_FAIL
 ```
 
 A good harness is allowed to block work when the correct engineering action is to stop.
+
+## Failure-trace regression cases
+
+The generic v0.1 cases are supplemented by implementation regressions derived from real Harness failures:
+
+- `HEB-E-002`: quoted/space-bearing argv round trip;
+- `HEB-S-002`: compound-shell controller exception bypass;
+- `HEB-R-002`: persistent Reviewer session and explicit takeover;
+- `HEB-R-003`: linked-worktree identity isolation;
+- `HEB-E-003`: post-review diff invalidation.
+
+These cases should remain small and executable. Add another case only when a new failure trace is materially different from an existing one.

@@ -1,86 +1,79 @@
 # Platform adapters
 
-Adapters map platform features to the same lifecycle. They do not own product intent, evidence truth or acceptance.
+Adapters map platform capabilities to the same controller lifecycle. They do not own product intent, evidence truth, or acceptance.
 
-## Canonical skills
+## Shared contract
 
-Edit `skills/`, then mirror with:
+Both adapters:
+
+- capability-probe the executable and required resume surface;
+- launch Reviewer read-only and Worker workspace-write;
+- require structured output matching a generated JSON schema;
+- capture a real platform session/thread ID;
+- persist a logical session binding under `.harness`;
+- fail closed when the CLI, resume capability, session capture, or output contract is unavailable;
+- never treat platform completion as Harness completion.
+
+Use:
+
+```bash
+harnessctl adapter-doctor --platform codex --strict
+harnessctl adapter-doctor --platform claude --strict
+harnessctl route --id <WU-ID> --platform codex
+harnessctl dispatch-review --id <WU-ID> --mode plan --platform claude ...
+harnessctl dispatch-worker --id <WU-ID> --platform claude ...
+harnessctl advance --id <WU-ID> --platform claude ...
+```
+
+## Codex
+
+- `AGENTS.md` is a concise project map and skill router.
+- Reviewer uses a read-only Codex execution sandbox.
+- Worker uses workspace-write after the Plan Review gate.
+- Close Review resumes the thread captured during Plan Review.
+- The root Codex session should spawn or resume native reviewer/worker subagents; the controller no longer claims to create those Codex subagents itself.
+- Native Codex subagents bind their observed session through hooks or `bind-session`, then use controller commands for `request-review`, `submit-review`, `start-work`, `verify`, and final gates.
+- `goal-export` keeps an auditable repo-local projection of the approved Work Unit and plan.
+- Worker dispatch uses the stable app-server `thread/start|resume` and `thread/goal/set` surface to bind that projection to actual persisted Codex Goal state before the execution turn.
+- If Goal bootstrap is unavailable or fails, the adapter records an explicit degraded state and may continue with ordinary `codex exec`; evidence, review, and risk gates never degrade.
+- Goal completion is a worker signal only, never evidence, review, delivery, or archive authority.
+
+## Claude Code
+
+- `CLAUDE.md` is a concise project map, not enforcement.
+- Reviewer runs through the `harness-reviewer` agent with read-only tools.
+- Worker runs through `harness-worker` with edit/write tools after the gate.
+- Close Review resumes the session captured during Plan Review.
+- Claude keeps the controller-managed `dispatch-review`, `dispatch-worker`, and `advance` workflow.
+- Permissions, sandboxing, hooks, CI, and controller checks remain defense in depth.
+
+## Hooks
+
+Installed adapters include:
+
+| Event | Purpose |
+|---|---|
+| `SessionStart` | inject a short repository-grounded recovery pointer |
+| `SubagentStart` | inject role/Work Unit routing context |
+| `PreToolUse` | enforce phase/path/shell policy early |
+| `PreCompact` | write a fresh controller checkpoint/handoff |
+| `PostCompact` | restore the compact recovery pointer |
+| `Stop` | checkpoint/handoff reminder; never traps the user in a session |
+
+Hooks are not the sole critical boundary. Controller gates, platform permissions/sandbox, CI, GitHub branch protection, and human gates still apply.
+
+The shell policy permits a controller command only when the entire shell input is one direct controller invocation. `harnessctl ...; destructive-command` and equivalent composition are rejected.
+
+## Skills
+
+Edit canonical `skills/`, then mirror:
 
 ```bash
 python3 scripts/sync_platform_skills.py
 ```
 
-| Platform | Repository skill path |
-|---|---|
-| Codex | `.agents/skills/<name>/SKILL.md` |
-| Claude Code | `.claude/skills/<name>/SKILL.md` |
+Codex reads `.agents/skills`; Claude reads `.claude/skills`. Skills guide reasoning and call controller commands, but cannot mutate lifecycle state by prose.
 
-`.codex/skills` is not used by the current adapter.
+## Failure behavior
 
-The default catalog is intentionally small:
-
-```text
-clarify, spec, plan, ground, tdd, evidence, review, github, handoff, compound
-```
-
-Skills guide reasoning and call controller commands. They do not change lifecycle state by prose alone.
-
-## Codex
-
-`AGENTS.md` is a concise project map and skill router. Keep active Work Unit state out of it.
-
-Default retained subagents:
-
-| Agent | Capability |
-|---|---|
-| worker | workspace write inside the approved scope |
-| reviewer | read-only plan and close review |
-
-Project agent definitions live under `.codex/agents/`. Pass a small input bundle: Work Unit ID, tracked spec, local plan when available, current diff/evidence, role and output contract.
-
-Codex Goals may represent the current thread's approved execution objective after plan review. Goal completion never replaces `harnessctl verify`, close review or GitHub/CI integration. The tracked spec remains the durable intent source.
-
-The default Codex hook surface is deliberately narrow:
-
-| Event | Use |
-|---|---|
-| `PreCompact` | non-blocking reminder to write a local handoff |
-| `PostCompact` | restore a short repository-grounded brief |
-| `Stop` | non-blocking reminder only; the user can always end the session |
-
-Codex hooks are defense in depth, not a complete sandbox: the adapter keeps controller, CI, permissions and worktree boundaries authoritative. Project hooks also depend on the repository being trusted by Codex. Optional repository-specific hooks such as `PreToolUse`, `PermissionRequest`, `SessionStart`, or `SubagentStart` may still be wired in later, but they are not part of the default installed surface.
-
-## Claude Code
-
-`CLAUDE.md` is a concise project map. `.claude/settings.json` uses permissions and narrow hooks:
-
-| Event | Use |
-|---|---|
-| `PreCompact` | non-blocking handoff reminder |
-| `PostCompact` | short recovery context |
-| `Stop` | non-blocking session-end reminder |
-
-Completion is gated by explicit controller commands and CI, not by preventing the user from stopping a session.
-
-Claude agents under `.claude/agents/` mirror the worker/reviewer split. Set `HARNESS_ROLE=reviewer` for the deterministic read-only path policy when the platform adapter can supply role environment.
-
-## Git and GitHub
-
-Use normal software-development control surfaces:
-
-```text
-approved spec
-→ branch/worktree
-→ bounded commits
-→ controller-observed local checks
-→ PR and CI
-→ human/reviewer integration
-```
-
-The tracked spec can include issue, branch and pull-request references in its Delivery tracking section. Git diff/commits are execution truth; GitHub issue/PR/CI/review are collaboration and integration truth. Neither replaces the evidence contract.
-
-For medium+ work, prefer one Work Unit per branch/worktree and one reviewable PR. Parallel workers must use separate worktrees; the controller refuses two active implementation Work Units in one workspace.
-
-## Platform failure behavior
-
-Adapters must fail visibly when a required capability changes. Keep adapter command/config tests in CI and do not silently skip reviewer, hook or validation legs after a CLI/API change.
+Platform CLI behavior changes over time. Keep adapter command/resume/Goal-control tests in CI. A failed core capability probe or missing session ID must block and expose the error; it must not silently skip a Reviewer or Worker leg. Optional Goal-control failure must remain visible without weakening Controller acceptance gates.

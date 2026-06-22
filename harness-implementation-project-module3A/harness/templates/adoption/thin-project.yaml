@@ -1,0 +1,7 @@
+schema_version: harness.project_config.v1
+tracked_specs_dir: docs/spec
+runtime_dir: .harness
+required_hooks:
+  - pre-compact
+  - post-compact
+  - stop

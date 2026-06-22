@@ -1,0 +1,28 @@
+schema_version: heb.case.v0.1
+case_id: HEB-R-002
+title: "Plan and Close Review retain one logical Reviewer session"
+category: recovery
+risk: medium
+fixture:
+  repo: fixtures/repo-small
+  start_commit: ""
+  setup_command: ""
+  validation_command: "python3 -m unittest harness.tests.test_harnessctl.HarnessV3Tests.test_close_review_requires_same_reviewer_logical_session"
+task:
+  user_intent: "Carry Plan Review risks into Close Review without allowing silent reviewer replacement."
+  expected_outcome:
+    - "Close Review resumes the Plan Review logical session."
+    - "Unrecoverable replacement requires explicit takeover and a new Plan Review."
+  non_goals: ["Do not call a same-name fresh session continuous review."]
+  allowed_paths: [".harness/**"]
+  out_of_bounds: ["src/**"]
+required_evidence:
+  - id: EV-SESSION
+    type: lineage_test
+    description: "Review track generation, identity, and logical session match both verdicts."
+fault_injection:
+  - type: reviewer_session_change
+    after_condition: "plan_review_passed"
+expected_process: ["Reject the new session, then require reviewer-takeover for replacement."]
+hard_gates: ["No silent reviewer session replacement."]
+metrics: {outcome: true, process: true, evidence: true, recovery: true, efficiency: true, human_burden: true}

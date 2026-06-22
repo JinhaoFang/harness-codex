@@ -1,85 +1,123 @@
 # Workflow
 
-## 1. Clarify
+The Harness has two loops and three long-lived roles.
 
-Start with `harness-clarify`. Ask one high-value question at a time, give a recommended answer when useful, and inspect the repository when the answer is already available there. Do not modify product files.
+```text
+Definition loop: idea → clarify → approved tracked Spec
+Delivery loop:   Spec → Plan → Plan Review → Worker/TDD → evidence → Close Review → integration
 
-The output is a draft `docs/spec/<WU-ID>.md` containing intent, observable outcome, non-goals, write boundary, out-of-bounds paths, evidence claims, stop conditions, decisions and remaining assumptions.
-
-## 2. Approve the tracked spec
-
-The user approves a concrete revision:
-
-```bash
-python3 harness/cli/harnessctl.py approve-spec \
-  --id <WU-ID> --approved-by human:<identity> --approval-ref <issue/comment/ref>
+Conductor: clarify, obtain approval, and invoke lifecycle transitions
+Reviewer:  read-only; one logical platform session from Plan Review through Close Review
+Worker:    isolated implementation and controller-observed evidence production
 ```
 
-The controller writes approval metadata and a content hash into the tracked spec. Editing approved content makes that marker stale until it is explicitly reapproved or amended.
+## 1. Clarify and freeze intent
 
-## 3. Design locally
+Use `harness-clarify` before product-code changes. Inspect the minimum relevant repository facts, ask one high-value product question at a time, and update the single tracked Spec draft. Clarification ends at `awaiting_spec_approval`; it never silently starts planning or implementation.
 
-The technical plan is an intermediate artifact:
+The canonical JSON block in `docs/spec/<WU-ID>.md` owns intent, observable outcomes, non-goals, scope, claim IDs, structured checks, stop conditions, and clarification decisions. Commands are `argv[]`, not quoted shell strings. `scope.write_boundary` and `scope.out_of_bounds` are executable repository path/glob constraints, not descriptive prose; the controller matches them mechanically against changed files.
+
+```bash
+harnessctl check --id <WU-ID> --gate spec --strict
+harnessctl approve-spec \
+  --id <WU-ID> --approved-by human:<identity> --approval-ref <durable-ref>
+```
+
+Approval binds the semantic contract hash. Delivery references are deliberately excluded from that hash; product intent is not reapproved merely because an issue or PR number changes.
+
+## 2. Build the local technical plan
+
+The ignored plan lives at:
 
 ```text
 .harness/work-units/active/<WU-ID>/plan.md
 ```
 
-It must be rebuilt from the approved spec, current code/tests/runtime, Git/GitHub context and local rules. It includes architecture tradeoffs, the change map, TDD behavior slices, verification commands, risks and the questions the reviewer must revisit.
+Re-ground it in current code, tests, runtime, local rules, and Git/GitHub facts. Every behavior slice binds a required claim to test paths, an observable oracle, RED check and expected failure signature, GREEN check, allowed paths, risks, and replan conditions. The plan must also define the final `acceptance_evidence` level for each claim so the Worker and Reviewer know whether completion depends on unit, integration, functional, E2E, acceptance, smoke, or other runtime-facing proof. The plan may evolve as project facts are discovered, but cannot alter approved intent or scope by itself.
 
-## 4. Plan review
+## 3. Advance continuously
 
-A reviewer reads the current repository, approved spec and local plan directly. It does not review formatting alone and does not rely primarily on the planner's narrative.
-
-```bash
-harnessctl request-review --mode plan --reviewer-id <REVIEWER-ID> --reviewer-session <REVIEW-SESSION> --planner-id <PLANNER-ID> --planner-session <PLANNER-SESSION>
-harnessctl submit-review  --mode plan --request-id <ID> --decision PASS ...
-```
-
-The first request creates one review track. Close review normally reuses that reviewer identity.
-
-## 5. Isolated implementation with TDD
-
-After plan review:
+After the plan passes its structural gate, invoke:
 
 ```bash
-harnessctl start-work --id <WU-ID> --builder-id <ID> --builder-session <SESSION>
+harnessctl route --id <WU-ID> --platform codex
+harnessctl advance \
+  --id <WU-ID> --platform claude \
+  --reviewer-id <REVIEWER-ID> \
+  --planner-id <PLANNER-ID> --planner-session <PLANNER-SESSION> \
+  --builder-id <WORKER-ID>
 ```
 
-Use a separate worker session/worktree where practical. For behavior changes:
+For Codex, `route` repeatedly tells the main session which native subagent action is next. For Claude, `advance` repeatedly asks the controller for the next valid transition. Across both paths the lifecycle can:
+
+```text
+dispatch Plan Review
+→ dispatch/resume Worker
+→ dispatch Close Review in the same Reviewer session
+→ run final acceptance gates
+```
+
+It stops rather than guessing when clarification is incomplete, the plan is invalid, evidence is missing, a reviewer requests changes, a platform adapter/native session binding fails, or a human/risk decision is required. Each transition rechecks current state and hashes, so a stale action cannot silently mutate a newer Work Unit generation.
+
+## 4. Plan Review
+
+The Reviewer reads the tracked Spec, local plan, current repository, tests, and relevant runtime facts. It does not merely validate document shape or planner-selected anchors. Claude's adapter capability-probes the installed CLI and launches a read-only reviewer. Codex instead uses a native reviewer subagent whose real session is bound into the same logical review track.
+
+For manual review, use `request-review` and `submit-review`. A reviewer replacement requires `reviewer-takeover`; takeover increments generation and requires Plan Review again.
+
+## 5. Worker and behavior-first TDD
+
+The Worker gets workspace-write capability only after Plan Review. For each behavior slice it should run:
 
 ```bash
-harnessctl verify --claim EV1 --phase red   --expect fail -- <targeted-test>
-harnessctl verify --claim EV1 --phase green --expect pass -- <targeted-test>
-harnessctl verify --claim EV1 --phase final
+harnessctl verify --id <WU-ID> --claim <EV-ID> --phase red
+harnessctl verify --id <WU-ID> --claim <EV-ID> --phase green
+harnessctl verify --id <WU-ID> --claim <EV-ID> --phase final
 ```
 
-A RED run counts only when the command actually exits non-zero as expected. The plan must state the expected failure reason so the worker checks that the test failed for the intended behavior rather than setup noise. GREEN helps the worker keep the slice honest during implementation; final verification is the acceptance-grade receipt used by completion gates.
+`verify` resolves the approved `check_id` and executes the exact `argv[]` with `shell=False`. Optional argv after `--` is an equality assertion, not another command source. RED succeeds only when the command fails for the reviewed reason; arbitrary syntax/import/environment failure is rejected by the expected-failure oracle.
 
-## 6. Verification
+Receipts bind the check-definition hash, argv, cwd, logs, approved spec/plan hashes, repository/workspace, branch, HEAD, and implementation diff. A skipped check remains `skipped` and blocks completion. Fresh internal or static checks do not automatically satisfy user-visible acceptance unless the planned `acceptance_evidence` says that level is sufficient.
 
-`harnessctl verify` launches the process, captures stdout/stderr, records argv/cwd/time/exit code, and binds the receipt to the current implementation content. Users do not provide a `pass` result.
+## 6. Close Review
 
-If a required check cannot run, use `record-skipped` to make the blocker visible. The task remains blocked until the evidence is produced or the evidence contract is materially revised and the spec is reapproved.
+Close Review resumes the exact platform session created for Plan Review. The Reviewer retains previously identified risks but must re-ground in current code, complete diff, tests, and fresh receipts. The plan remains a hypothesis, not proof.
 
-## 7. Close review
+A reviewer that modifies the implementation becomes a builder for the new diff; prior evidence/review must be regenerated. This implementation therefore keeps the Reviewer read-only. High/critical work may add a separate fresh security/risk reviewer or human gate without replacing the continuous primary Reviewer.
 
-The same review track reads the current diff, code, tests and fresh evidence. The reviewer is read-only; findings return to the worker. Changes after evidence or close review invalidate the affected gate.
+Any relevant change after the review request or verdict invalidates that review.
+
+## 7. Git/GitHub integration
+
+Git is execution history; GitHub is collaboration/integration history. Neither replaces the Spec or evidence.
 
 ```bash
-harnessctl request-review --mode close --reviewer-id <same-ID> --reviewer-session <fresh-session>
-harnessctl submit-review  --mode close --request-id <ID> --decision PASS --evidence-ref <receipt>
-harnessctl finalize-check --id <WU-ID> --strict
+harnessctl delivery-link \
+  --id <WU-ID> --issue <REF> --branch <BRANCH> --pull-request <REF> \
+  --required-check test --required-check lint
+harnessctl github-sync --id <WU-ID>
+harnessctl check --id <WU-ID> --gate delivery --strict
 ```
 
-## 8. Git/GitHub and recovery
+The controller stores only a local snapshot/reference. When a PR is linked, the delivery gate checks PR HEAD against local HEAD and checks explicitly declared required status names. It does not reinterpret CI success as evidence for unrelated product claims.
 
-Git branches/worktrees isolate execution; commits and diffs are execution truth; GitHub issues/PRs/CI/human reviews are collaboration and integration truth. They do not replace the approved spec or controller-observed verification.
+## 8. Recovery
 
-Generate a local handoff before transferring work. To continue an existing local handoff or cleared blocker, run `resume-work` with a fresh worker session; no generic state mutation command is provided. If `.harness/` is lost:
+```text
+resume-session: local runtime and platform bindings still exist; continue them
+reconstruct:     local runtime was lost; rebuild conservatively from Spec + Git
+```
+
+`PreCompact` writes a fresh controller checkpoint; `SessionStart`/`PostCompact` inject only a short pointer. Checkpoints include Work Unit, workspace, branch, base/head, diff, current role, session refs, evidence refs, blockers, and next safe action.
+
+Reconstruction never claims that old local plans, receipts, or reviews survived.
+
+## 9. Archive and override
+
+Normal archive requires Spec, scope, verification, review, optional delivery gate, and a handoff/no-next-step reason. Forced archive is an auditable risk override and requires:
 
 ```bash
-harnessctl resume --id <WU-ID>
+--reason ... --approved-by human:<identity> --approval-ref <durable-ref>
 ```
 
-An approved marker in the tracked spec allows recovery into `spec_approved`; otherwise recovery returns to clarification. Old local plan, evidence and review are never invented.
+The override is recorded before the local runtime is moved to archive.

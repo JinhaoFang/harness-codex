@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shlex
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
@@ -208,6 +209,68 @@ def phase_write_policy(root: Path, event: Dict[str, Any]) -> Tuple[str, str]:
     return "allow", ""
 
 
+def _has_shell_composition(command: str) -> bool:
+    """Detect shell composition/expansion outside a single-quoted literal.
+
+    Controller lifecycle commands receive a narrow exception from phase write
+    blocking. The exception is safe only when the *entire* shell input is one
+    direct controller argv. A substring check would let an attacker append
+    ``; rm ...`` or ``&& ...`` after an otherwise legitimate command.
+    """
+    quote = ""
+    escaped = False
+    index = 0
+    while index < len(command):
+        char = command[index]
+        if escaped:
+            escaped = False
+            index += 1
+            continue
+        if quote == "'":
+            if char == "'":
+                quote = ""
+            index += 1
+            continue
+        if char == "\\":
+            escaped = True
+            index += 1
+            continue
+        if char == "'":
+            quote = "'"
+            index += 1
+            continue
+        if char == '"':
+            quote = "" if quote == '"' else '"'
+            index += 1
+            continue
+        # Command substitution is active outside single quotes, including
+        # inside double quotes. Backticks are equivalent.
+        if char == "`" or (char == "$" and index + 1 < len(command) and command[index + 1] == "("):
+            return True
+        if not quote and (char in ";&|<>" or char in "\r\n"):
+            return True
+        index += 1
+    return bool(quote) or escaped
+
+
+def _is_single_controller_command(command: str) -> bool:
+    if _has_shell_composition(command):
+        return False
+    try:
+        argv = shlex.split(command, posix=True)
+    except ValueError:
+        return False
+    if not argv:
+        return False
+    first = Path(argv[0]).name.lower()
+    if first in {"python", "python3", "python.exe", "python3.exe", "py"}:
+        if len(argv) < 2:
+            return False
+        script = argv[1].replace("\\", "/")
+        return script == "harness/cli/harnessctl.py" or script.endswith("/harness/cli/harnessctl.py")
+    return first in {"harnessctl", "harnessctl.py"}
+
+
 def phase_command_policy(root: Path, event: Dict[str, Any]) -> Tuple[str, str]:
     tool_name, command = extract_command(event)
     if tool_name.lower() not in SHELL_TOOLS or not command.strip():
@@ -219,8 +282,10 @@ def phase_command_policy(root: Path, event: Dict[str, Any]) -> Tuple[str, str]:
     status = str(state.get("status", ""))
     role = os.environ.get("HARNESS_ROLE", "").lower()
     normalized = " ".join(command.split())
-    # Controller commands are the authorized way to update runtime lifecycle data.
-    is_controller_command = "harness/cli/harnessctl.py" in normalized or re.search(r"\bharnessctl\b", normalized)
+    # Controller commands are the authorized way to update runtime lifecycle
+    # data, but only when the complete shell input is one direct controller
+    # argv. Merely containing the word harnessctl grants no exception.
+    is_controller_command = _is_single_controller_command(command)
     mutates = any(pattern.search(command) for pattern in MUTATING_SHELL_PATTERNS)
     if not mutates or is_controller_command:
         return "allow", ""

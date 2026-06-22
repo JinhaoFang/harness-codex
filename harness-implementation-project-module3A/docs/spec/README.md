@@ -2,10 +2,16 @@
 
 Approved user/product intent for non-trivial Work Units lives here as `docs/spec/<WU-ID>.md`.
 
-A spec records the problem, observable outcome, non-goals, write boundary, required evidence, stop conditions, clarification decisions, context pointers, and stable GitHub delivery references. It should be understandable by developers without access to an agent session.
+Each file contains human-readable walkthrough notes plus one marked canonical JSON contract. The contract records intent, observable outcomes, non-goals, scope, claim IDs, structured check definitions, stop conditions, clarification decisions, context pointers and stable delivery references. It must remain understandable without access to an agent transcript.
 
-Technical implementation plans, command logs, evidence receipts, review tracks, and handoffs are local intermediate artifacts under ignored `.harness/`. When that runtime is absent, rebuild it from the tracked spec, Git/GitHub history, and current code with:
+Technical plans, receipts, command logs, Reviewer session lineage, checkpoints and handoffs remain under ignored `.harness/`.
 
 ```bash
-python3 harness/cli/harnessctl.py resume --id <WU-ID>
+# Local runtime still exists and belongs to this repository/worktree/branch.
+harnessctl resume-session --id <WU-ID>
+
+# Local runtime is gone; deliberately rebuild a conservative starting point.
+harnessctl reconstruct --id <WU-ID>
 ```
+
+Reconstruction never claims that old local evidence or review survived.

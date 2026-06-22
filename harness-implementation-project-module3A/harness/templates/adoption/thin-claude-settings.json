@@ -1,0 +1,65 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(git reset --hard)",
+      "Bash(git push --force*)",
+      "Bash(git push* main*)",
+      "Bash(git push* master*)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Bash(terraform apply*)",
+      "Bash(pulumi up*)",
+      "Bash(kubectl apply*)",
+      "Bash(kubectl delete*)",
+      "Bash(npm publish*)",
+      "Bash(pnpm publish*)"
+    ],
+    "allow": [
+      "Bash(harnessctl *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Read(**)",
+      "Grep(**)",
+      "Glob(**)"
+    ]
+  },
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "harnessctl hook pre-compact"
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "manual|auto",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "harnessctl hook post-compact"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "harnessctl hook stop"
+          }
+        ]
+      }
+    ]
+  }
+}

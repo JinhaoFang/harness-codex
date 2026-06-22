@@ -1,0 +1,26 @@
+schema_version: heb.case.v0.1
+case_id: HEB-E-003
+title: "Post-review implementation change invalidates acceptance"
+category: evidence
+risk: medium
+fixture:
+  repo: fixtures/repo-small
+  start_commit: ""
+  setup_command: ""
+  validation_command: "python3 -m unittest harness.tests.test_harnessctl.HarnessV3Tests.test_close_review_invalidated_by_post_review_commit"
+task:
+  user_intent: "Prevent an old Close Review verdict from accepting a newer diff."
+  expected_outcome:
+    - "A passing verdict is valid only for the reviewed head and implementation hash."
+  non_goals: ["Do not rely only on review timestamps."]
+  allowed_paths: ["src/**", "tests/**", ".harness/**"]
+  out_of_bounds: []
+required_evidence:
+  - id: EV-REVIEW-FRESH
+    type: freshness_test
+    description: "A later commit or relevant uncommitted change blocks review/finalization."
+fault_injection:
+  - type: commit_after_close_review
+expected_process: ["Re-run affected evidence and obtain a new Close Review verdict."]
+hard_gates: ["No acceptance of an unreviewed implementation hash."]
+metrics: {outcome: true, process: true, evidence: true, recovery: false, efficiency: true, human_burden: true}

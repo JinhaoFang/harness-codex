@@ -1,6 +1,6 @@
 ---
 name: harness-ground
-description: Ground a spec, plan, review, or debugging task in current repository truth using minimal targeted exploration. Use before asking factual questions or trusting summaries/documents about current behavior.
+description: Ground a spec, plan, review, or debugging task in current repository truth using minimal targeted exploration. Use before asking factual questions or trusting summaries/documents about current behavior（before using harness-clarigy）.
 ---
 
 # Harness Ground

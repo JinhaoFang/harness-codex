@@ -1,0 +1,6 @@
+schema_version: harness.lock.v1
+source:
+  repo: coding-agent-harness-implementation
+  version: 0.3.0
+runtime:
+  profile: thin-shared

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Harness Persistent Review Track",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "review_track_id",
+    "work_unit_id",
+    "generation",
+    "reviewer_id",
+    "logical_reviewer_session_id",
+    "reviewer_session_source",
+    "platform",
+    "platform_session_id",
+    "platform_agent_id",
+    "plan_review_id",
+    "close_review_id",
+    "created_at",
+    "updated_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "harness.review_track.v2"
+    },
+    "review_track_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "work_unit_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "generation": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "reviewer_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "logical_reviewer_session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "reviewer_session_source": {
+      "type": "string",
+      "minLength": 1
+    },
+    "platform": {
+      "type": "string"
+    },
+    "platform_session_id": {
+      "type": "string"
+    },
+    "platform_agent_id": {
+      "type": "string"
+    },
+    "plan_review_id": {
+      "type": "string"
+    },
+    "close_review_id": {
+      "type": "string"
+    },
+    "takeover_history": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "updated_at": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": true
+}

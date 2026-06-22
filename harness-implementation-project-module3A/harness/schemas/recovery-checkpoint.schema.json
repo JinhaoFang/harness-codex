@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Harness Recovery Checkpoint",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "work_unit_id",
+    "repository_id",
+    "workspace_id",
+    "worktree",
+    "branch",
+    "bound_repository_id",
+    "bound_workspace_id",
+    "bound_worktree",
+    "bound_branch",
+    "base_commit",
+    "head_commit",
+    "diff_hash",
+    "implementation_diff_hash",
+    "status",
+    "current_role",
+    "builder_id",
+    "builder_session_id",
+    "review_track_id",
+    "logical_reviewer_session_id",
+    "latest_evidence_refs",
+    "known_failures",
+    "blockers",
+    "next_safe_action",
+    "rollback_or_reopen_path",
+    "reason",
+    "created_at"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "harness.recovery_checkpoint.v1"
+    },
+    "work_unit_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repository_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workspace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "worktree": {
+      "type": "string",
+      "minLength": 1
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bound_repository_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bound_workspace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bound_worktree": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bound_branch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base_commit": {
+      "type": "string"
+    },
+    "head_commit": {
+      "type": "string"
+    },
+    "diff_hash": {
+      "type": "string"
+    },
+    "implementation_diff_hash": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "current_role": {
+      "type": "string"
+    },
+    "builder_id": {
+      "type": "string"
+    },
+    "builder_session_id": {
+      "type": "string"
+    },
+    "review_track_id": {
+      "type": "string"
+    },
+    "logical_reviewer_session_id": {
+      "type": "string"
+    },
+    "latest_evidence_refs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "known_failures": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "blockers": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_safe_action": {
+      "type": "string"
+    },
+    "rollback_or_reopen_path": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

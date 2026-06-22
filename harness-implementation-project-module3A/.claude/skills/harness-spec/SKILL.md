@@ -10,21 +10,22 @@ The tracked spec is desired-intent truth. Current code/tests/runtime remain curr
 1. Create the Work Unit if needed:
 
 ```bash
-python3 harness/cli/harnessctl.py new --id <WU-ID> --title "..." --type <type> --risk <risk>
+harnessctl new --id <WU-ID> --title "..." --type <type> --risk <risk>
 ```
 
 2. Complete `docs/spec/<WU-ID>.md` with observable behavior, non-goals, write boundary, out-of-bounds paths, executable evidence claims, stop conditions, clarification decisions, and minimal context pointers.
+   `scope.write_boundary` and `scope.out_of_bounds` must be repo-relative path/glob patterns such as `app/**`, `tests/**`, or `package.json`, not descriptive prose. `scope.likely_changed_areas` may stay higher-level, but path-like values are preferred.
 3. Do not put the technical implementation plan into the tracked spec.
 4. Run:
 
 ```bash
-python3 harness/cli/harnessctl.py check --id <WU-ID> --gate spec --strict
+harnessctl check --id <WU-ID> --gate spec --strict
 ```
 
 5. Walk the spec through with the user. Only after explicit approval run:
 
 ```bash
-python3 harness/cli/harnessctl.py approve-spec --id <WU-ID> --approved-by human:<IDENTITY> --approval-ref "<issue comment, review note, or other durable approval reference>"
+harnessctl approve-spec --id <WU-ID> --approved-by human:<IDENTITY> --approval-ref "<issue comment, review note, or other durable approval reference>"
 ```
 
 If the tracked spec changes later, approval and plan review become stale. Re-approve intentionally; never let a future design artifact rewrite current repository facts.

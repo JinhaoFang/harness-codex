@@ -1,21 +1,27 @@
-.PHONY: test doctor validate ci skills check zip
+.PHONY: test doctor validate ci skills check zip release
 
+PYTHON ?= python3
+
+# PYTHONDONTWRITEBYTECODE keeps validation from creating package noise.
 test:
-	python3 -m unittest discover -s harness/tests
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) -m unittest discover -s harness/tests -v
 
 doctor:
-	python3 harness/cli/harnessctl.py doctor
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) harness/cli/harnessctl.py doctor
 
 validate:
-	python3 harness/cli/harnessctl.py validate --all --strict
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) harness/cli/harnessctl.py validate --all --strict
 
 ci:
-	python3 harness/cli/harnessctl.py ci --strict
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) harness/cli/harnessctl.py ci --strict
 
 skills:
-	python3 harness/cli/harnessctl.py check --gate skills --strict
+	PYTHONDONTWRITEBYTECODE=1 $(PYTHON) harness/cli/harnessctl.py check --gate skills --strict
 
 check: test doctor validate ci skills
 
 zip:
-	python3 scripts/package.py
+	$(PYTHON) scripts/package.py
+
+release:
+	$(PYTHON) scripts/package.py --verify

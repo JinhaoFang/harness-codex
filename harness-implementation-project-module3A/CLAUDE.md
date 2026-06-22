@@ -4,7 +4,7 @@ This repository develops a portable coding-agent Harness. Target repositories re
 
 ## Map
 
-- `harness/cli/harnessctl.py`: deterministic lifecycle, command execution, evidence freshness, and review lineage.
+- `harnessctl`: deterministic lifecycle, command execution, evidence freshness, and review lineage.
 - `harness/hooks/`: narrow platform guards and recovery reminders.
 - `skills/`: canonical skill source; sync to `.agents/skills` and `.claude/skills`.
 - `harness/templates/adoption/`: concise target-repository entrypoints.
@@ -26,6 +26,6 @@ This repository develops a portable coding-agent Harness. Target repositories re
 ```bash
 python3 scripts/sync_platform_skills.py
 python3 -m unittest discover -s harness/tests -v
-python3 harness/cli/harnessctl.py check --gate skills --strict
-python3 harness/cli/harnessctl.py ci --strict
+harnessctl check --gate skills --strict
+harnessctl ci --strict
 ```

@@ -1,0 +1,23 @@
+name: harness-checks
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  harness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Harness doctor
+        run: ./harnessctl doctor
+      - name: Validate harness artifacts
+        run: ./harnessctl validate --all --strict
+      - name: Harness lifecycle CI gate
+        run: ./harnessctl ci --strict
+      - name: Skill catalog gate
+        run: ./harnessctl check --gate skills --strict

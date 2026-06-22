@@ -7,25 +7,38 @@
     "work_unit_id",
     "status",
     "risk",
+    "generation",
     "spec_path",
     "plan_path",
-    "branch",
-    "worktree",
-    "workspace_id",
     "base_commit",
+    "bound_repository_identity",
+    "bound_workspace_id",
+    "bound_worktree",
+    "bound_branch",
+    "repository_id",
+    "workspace_id",
+    "worktree",
+    "branch",
     "head_commit",
     "changed_files",
     "implementation_changed_files",
     "diff_hash",
     "implementation_diff_hash",
+    "latest_evidence_refs",
+    "known_failures",
+    "blockers",
+    "next_safe_action",
+    "rollback_or_reopen_path",
+    "created_at",
     "updated_at"
   ],
   "properties": {
     "schema_version": {
-      "const": "harness.work_unit_state.v2"
+      "const": "harness.work_unit_state.v3"
     },
     "work_unit_id": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "status": {
       "enum": [
@@ -51,13 +64,28 @@
         "critical"
       ]
     },
+    "generation": {
+      "type": "integer",
+      "minimum": 1
+    },
     "spec_path": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "plan_path": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1
     },
     "spec_approved_hash": {
+      "type": "string"
+    },
+    "spec_approved_at": {
+      "type": "string"
+    },
+    "spec_approved_by": {
+      "type": "string"
+    },
+    "spec_approval_ref": {
       "type": "string"
     },
     "plan_approved_hash": {
@@ -66,23 +94,52 @@
     "review_track_id": {
       "type": "string"
     },
+    "logical_reviewer_session_id": {
+      "type": "string"
+    },
     "builder_id": {
       "type": "string"
     },
     "builder_session_id": {
       "type": "string"
     },
-    "branch": {
-      "type": "string"
-    },
-    "worktree": {
-      "type": "string"
-    },
-    "workspace_id": {
+    "current_role": {
       "type": "string"
     },
     "base_commit": {
       "type": "string"
+    },
+    "bound_repository_identity": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bound_workspace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bound_worktree": {
+      "type": "string",
+      "minLength": 1
+    },
+    "bound_branch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repository_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "workspace_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "worktree": {
+      "type": "string",
+      "minLength": 1
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1
     },
     "head_commit": {
       "type": "string"
@@ -129,20 +186,12 @@
     "rollback_or_reopen_path": {
       "type": "string"
     },
+    "created_at": {
+      "type": "string"
+    },
     "updated_at": {
       "type": "string"
-    },
-    "planner_id": {
-      "type": "string"
-    },
-    "planner_identity_source": {
-      "type": "string"
-    },
-    "planner_session_id": {
-      "type": "string"
-    },
-    "planner_session_source": {
-      "type": "string"
     }
-  }
+  },
+  "additionalProperties": true
 }

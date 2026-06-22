@@ -12,37 +12,36 @@
 
 This file is a short map, not the lifecycle manual or task-state store.
 
-- Ambiguous or non-trivial request: use `$harness-clarify`.
-- Approved product intent: use `$harness-spec`; tracked specs live in `docs/spec/<WU-ID>.md`.
+- Ambiguous or non-trivial request: use `$harness-clarify`; do not implement.
+- Approved product intent: use `$harness-spec`; tracked Specs live in `docs/spec/<WU-ID>.md`.
 - Technical design: use `$harness-plan`; local plans live in ignored `.harness/` runtime.
-- Implementation: start only after the required plan review gate passes, then use `$harness-tdd`.
-- Verification: use `$harness-evidence`; pass receipts are created by `harnessctl verify`, not agent claims.
-- Plan and close review: use the same `$harness-review` track and reviewer identity.
+- After the plan is complete, use native Codex reviewer/worker subagents for Plan Review, implementation, and Close Review. Keep `harnessctl` for checks, session binding, lifecycle state, and final gates.
+- Implementation: use `$harness-tdd`; only a controller-bound Worker may edit product code.
+- Verification: use `$harness-evidence`; pass receipts come from `harnessctl verify`, not agent claims.
+- Plan and Close Review: use the same logical `$harness-review` platform session.
 - Git/GitHub collaboration: use `$harness-github`.
-- Cross-session recovery: use `$harness-handoff`; use `harnessctl resume-work` after a local handoff/blocker; when local runtime is absent, run `harnessctl resume` and rebuild from the tracked spec, Git/GitHub, and current code.
+- Recovery: use `resume-session` while local runtime exists; use `reconstruct` when it was lost.
 
 ## Non-negotiable boundaries
 
-- Before `approve-spec`, product code must not be modified.
-- Before plan review passes and `start-work` runs, product code must not be modified.
-- Work only inside the approved spec write boundary; surface scope changes instead of expanding silently.
-- Repository code, tests, and runtime define current project truth. The tracked spec defines desired intent. The local plan is an implementation hypothesis.
-- Required evidence must actually run after the relevant implementation change. A skipped check blocks completion; revise and reapprove the spec when the evidence contract must change.
-- Reviewer is read-only and must not fix the worker's code or manufacture evidence.
-- Dangerous, production, secret, billing, migration, deployment, or irreversible operations require platform permissions and accountable human approval.
+- Before explicit Spec approval, product code must not be modified.
+- Before Plan Review passes and the controller starts a Worker, product code must not be modified.
+- Work only inside the approved write boundary; surface scope changes instead of expanding silently.
+- Code/tests/runtime define current project truth. The tracked Spec defines desired intent. The local plan is an implementation hypothesis.
+- Required evidence must run after relevant changes. Skipped evidence blocks completion.
+- Reviewer is read-only and cannot fix the Worker's code or manufacture evidence.
+- Dangerous, production, secret, billing, migration, deployment, or irreversible operations require model-external boundaries and accountable human approval.
 
 ## Minimal commands
 
 ```bash
-python3 harness/cli/harnessctl.py new --id <WU-ID> --title "..." --type feature --risk medium
-python3 harness/cli/harnessctl.py check --id <WU-ID> --gate spec --strict
-python3 harness/cli/harnessctl.py approve-spec --id <WU-ID> --approved-by human:<identity> --approval-ref <durable-ref>
-python3 harness/cli/harnessctl.py check --id <WU-ID> --gate plan --strict
-python3 harness/cli/harnessctl.py request-review --id <WU-ID> --mode plan --reviewer-id <REVIEWER-ID> --reviewer-session <REVIEW-SESSION> --planner-id <PLANNER-ID> --planner-session <PLANNER-SESSION>
-python3 harness/cli/harnessctl.py submit-review --id <WU-ID> --mode plan --request-id <REQUEST-ID> --decision PASS --reviewer-id <REVIEWER-ID> --reviewer-session <REVIEW-SESSION>
-python3 harness/cli/harnessctl.py start-work --id <WU-ID> --builder-id <ID> --builder-session <SESSION>
-python3 harness/cli/harnessctl.py verify --id <WU-ID> --claim <EV-ID>
-python3 harness/cli/harnessctl.py finalize-check --id <WU-ID> --strict
+harnessctl new --id <WU-ID> --title "..." --type feature --risk medium
+harnessctl check --id <WU-ID> --gate spec --strict
+harnessctl approve-spec --id <WU-ID> --approved-by human:<identity> --approval-ref <durable-ref>
+# Complete the local plan, then ask Codex to spawn or resume native reviewer/worker subagents.
+harnessctl check --id <WU-ID> --gate plan --strict
+harnessctl route --id <WU-ID> --platform codex
+harnessctl finalize-check --id <WU-ID> --strict
 ```
 
-Detailed lifecycle guidance is in `docs/harness/`; deterministic behavior is in `harness/cli` and hooks.
+Detailed lifecycle guidance is in `docs/harness/`; for Codex native reviewer/worker orchestration, use `docs/harness/codex-native-subagents.md`. Deterministic behavior is in the controller, hooks, Git/CI, and platform permissions.

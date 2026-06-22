@@ -1,0 +1,27 @@
+schema_version: heb.case.v0.1
+case_id: HEB-R-003
+title: "Linked worktrees share repository identity but not workspace identity"
+category: recovery
+risk: medium
+fixture:
+  repo: fixtures/repo-small
+  start_commit: ""
+  setup_command: "git worktree add ..."
+  validation_command: "python3 -m unittest harness.tests.test_harnessctl.HarnessV3Tests.test_repository_identity_is_shared_but_workspace_identity_isolated"
+task:
+  user_intent: "Recover the correct Work Unit in each linked worktree."
+  expected_outcome:
+    - "Both worktrees have one repository identity."
+    - "Each worktree has a distinct workspace/current pointer."
+  non_goals: ["Do not restore the newest checkpoint from another worktree."]
+  allowed_paths: [".harness/**"]
+  out_of_bounds: []
+required_evidence:
+  - id: EV-WORKTREE
+    type: identity_test
+    description: "Repository and workspace IDs have the required equality/inequality relation."
+fault_injection:
+  - type: linked_worktree
+expected_process: ["Bind recovery to repository + canonical worktree path + branch."]
+hard_gates: ["No cross-worktree current pointer collision."]
+metrics: {outcome: true, process: true, evidence: true, recovery: true, efficiency: true, human_burden: false}

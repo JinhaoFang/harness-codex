@@ -18,7 +18,8 @@
       "Bash(pnpm publish*)"
     ],
     "allow": [
-      "Bash(python3 harness/cli/harnessctl.py *)",
+      "Bash(harnessctl *)",
+      "Bash(./harnessctl *)",
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)",
@@ -28,6 +29,28 @@
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/harness/hooks/context_router.py SessionStart --platform claude"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/harness/hooks/context_router.py SubagentStart --platform claude"
+          }
+        ]
+      }
+    ],
     "PreCompact": [
       {
         "matcher": "manual|auto",
@@ -45,7 +68,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 ${CLAUDE_PROJECT_DIR}/harness/hooks/context_router.py PostCompact"
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/harness/hooks/context_router.py PostCompact --platform claude"
           }
         ]
       }
@@ -57,6 +80,17 @@
           {
             "type": "command",
             "command": "python3 ${CLAUDE_PROJECT_DIR}/harness/hooks/session_end_handoff_check.py"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR}/harness/hooks/pre_tool_use_policy.py --platform claude"
           }
         ]
       }

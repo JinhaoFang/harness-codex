@@ -7,7 +7,7 @@ skills:
   - harness-review
 hooks:
   PreToolUse:
-    - matcher: "Bash|Edit|Write|MultiEdit"
+    - matcher: "Bash|Edit|Write"
       hooks:
         - type: command
           command: "python3 ${CLAUDE_PROJECT_DIR}/harness/hooks/pre_tool_use_policy.py --platform claude --role reviewer"
