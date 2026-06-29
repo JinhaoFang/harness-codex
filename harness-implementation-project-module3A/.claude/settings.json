@@ -23,6 +23,10 @@
       "Bash(git status*)",
       "Bash(git diff*)",
       "Bash(git log*)",
+      "Bash(git show*)",
+      "Bash(grep *)",
+      "Bash(rg *)",
+      "Bash(cat *)",
       "Read(**)",
       "Grep(**)",
       "Glob(**)"

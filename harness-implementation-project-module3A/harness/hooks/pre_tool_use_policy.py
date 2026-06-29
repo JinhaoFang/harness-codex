@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 from pathlib import Path
 
 from policy_common import (
@@ -28,10 +27,7 @@ def find_root(start: Path) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Harness PreToolUse policy hook")
     parser.add_argument("--platform", choices=["codex", "claude"], default="codex")
-    parser.add_argument("--role", choices=["reviewer", "worker"], default="")
     args = parser.parse_args()
-    if args.role:
-        os.environ["HARNESS_ROLE"] = args.role
     event = load_event()
     root = find_root(Path(str(event.get("cwd") or Path.cwd())))
     tool_name, command = extract_command(event)

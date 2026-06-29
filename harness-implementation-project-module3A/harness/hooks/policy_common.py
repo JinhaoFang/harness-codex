@@ -163,13 +163,9 @@ def phase_write_policy(root: Path, event: Dict[str, Any]) -> Tuple[str, str]:
         return "allow", ""
     ctl, wu_path, state = active
     status = str(state.get("status", ""))
-    role = os.environ.get("HARNESS_ROLE", "").lower()
     spec_rel = str(state.get("spec_path", ""))
     plan_rel = str(state.get("plan_path", ""))
     normalized = [_normalize_path(root, path) for path in paths]
-
-    if role == "reviewer":
-        return "deny", "Reviewer role is read-only. Return findings to the worker and submit verdicts through harnessctl."
 
     if status == "clarifying":
         disallowed = [path for path in normalized if path != spec_rel]
@@ -280,7 +276,6 @@ def phase_command_policy(root: Path, event: Dict[str, Any]) -> Tuple[str, str]:
         return "allow", ""
     _ctl, _wu_path, state = active
     status = str(state.get("status", ""))
-    role = os.environ.get("HARNESS_ROLE", "").lower()
     normalized = " ".join(command.split())
     # Controller commands are the authorized way to update runtime lifecycle
     # data, but only when the complete shell input is one direct controller
@@ -289,8 +284,6 @@ def phase_command_policy(root: Path, event: Dict[str, Any]) -> Tuple[str, str]:
     mutates = any(pattern.search(command) for pattern in MUTATING_SHELL_PATTERNS)
     if not mutates or is_controller_command:
         return "allow", ""
-    if role == "reviewer":
-        return "deny", "Reviewer shell is read-only; run inspection commands only."
     if status in PRE_IMPLEMENTATION_STATUSES:
         return "deny", f"Shell mutation is blocked while Work Unit status is {status}; finish spec and plan approval first."
     if status == "blocked":
