@@ -46,7 +46,7 @@ def context(base: Path, event_name: str, event: Dict[str, Any]) -> str:
     try:
         work_unit_id, wu_path = harnessctl.resolve_wu(base, None)
     except Exception:
-        return "Harness: no active local Work Unit. For non-trivial coding work, use harness-clarify and harness-spec before implementation."
+        return "Harness: no active local Work Unit. For non-trivial coding work, ground via harness-ground first, then use harness-clarify and harness-spec before implementation."
     state = harnessctl.load_json(harnessctl.state_path(wu_path), {})
     status = state.get("status", "unknown")
     platform_session = str(event.get("session_id") or event.get("thread_id") or "").strip()

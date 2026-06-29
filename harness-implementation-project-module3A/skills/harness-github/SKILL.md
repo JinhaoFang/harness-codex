@@ -5,6 +5,8 @@ description: Bind an approved Work Unit to Git branches, issues, pull requests, 
 
 # Harness GitHub
 
+> `harness-ground` consults this GitHub state when grounding before any role turn; this skill owns the binding and delivery-gate mechanism, `harness-ground` owns the read/sync discipline.
+
 Git/GitHub are execution and integration truth. They do not replace the tracked Spec, controller evidence, or Close Review.
 
 - Use one implementation Work Unit per branch/worktree and keep commits behavior-bounded and reviewable.

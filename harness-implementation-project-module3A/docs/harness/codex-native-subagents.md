@@ -19,6 +19,7 @@ The controller remains lifecycle authority. Native subagents own execution turns
 - Worker must not submit review verdicts.
 - Plan Review and Close Review must reuse the same logical reviewer session unless `reviewer-takeover` is explicitly recorded.
 - Fresh pass evidence must still come from `harnessctl verify`.
+- Every role grounds on current repository truth, Work Unit progress, and GitHub integration state via `harness-ground` before starting its turn; do not begin discussing, planning, reviewing, or implementing from a stale summary.
 
 ## Session binding
 
@@ -106,7 +107,7 @@ harnessctl submit-review --id <WU-ID> --request-id <RR> --mode plan \
 ### Close Review
 
 1. Resume the exact same reviewer logical session from Plan Review.
-2. Re-read current code, diff, receipts, and tests.
+2. Ground via `harness-ground`, then enumerate the **complete** diff with native `git diff <base_commit>..HEAD` and review every changed file and hunk — including bystander fields a planned change did not target — against the plan. Re-read receipts and tests.
 3. Do not defend the old plan; validate the current result.
 4. Submit:
 

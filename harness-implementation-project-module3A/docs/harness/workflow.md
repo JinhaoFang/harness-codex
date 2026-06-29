@@ -11,6 +11,8 @@ Reviewer:  read-only; one logical platform session from Plan Review through Clos
 Worker:    isolated implementation and controller-observed evidence production
 ```
 
+Every role grounds on current repository truth, Work Unit progress, and GitHub integration state via `harness-ground` before starting its turn — reading what *is*, not what a prior summary claimed. No role begins clarifying, planning, reviewing, or implementing from stale context.
+
 ## 1. Clarify and freeze intent
 
 Use `harness-clarify` before product-code changes. Inspect the minimum relevant repository facts, ask one high-value product question at a time, and update the single tracked Spec draft. Clarification ends at `awaiting_spec_approval`; it never silently starts planning or implementation.
@@ -81,7 +83,7 @@ Receipts bind the check-definition hash, argv, cwd, logs, approved spec/plan has
 
 ## 6. Close Review
 
-Close Review resumes the exact platform session created for Plan Review. The Reviewer retains previously identified risks but must re-ground in current code, complete diff, tests, and fresh receipts. The plan remains a hypothesis, not proof.
+Close Review resumes the exact platform session created for Plan Review. The Reviewer retains previously identified risks but must re-ground in current code, complete diff, tests, and fresh receipts. The Reviewer enumerates the complete diff with native `git diff` and reviews every changed file and hunk — including bystander fields the planned change did not target — so collateral damage is not hidden behind green checks. The plan remains a hypothesis, not proof.
 
 A reviewer that modifies the implementation becomes a builder for the new diff; prior evidence/review must be regenerated. This implementation therefore keeps the Reviewer read-only. High/critical work may add a separate fresh security/risk reviewer or human gate without replacing the continuous primary Reviewer.
 
