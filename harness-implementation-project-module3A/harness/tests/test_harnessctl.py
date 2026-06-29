@@ -227,6 +227,17 @@ class HarnessV3Tests(unittest.TestCase):
         self.assertEqual(2, result.returncode)
         self.assertIn("placeholder", result.stderr.lower())
 
+    def test_empty_open_questions_approves(self) -> None:
+        # An empty open_questions list means "no questions" and must pass
+        # approval without forcing the author to write ["none"].
+        contract = valid_contract("WU-EMPTYQ", "medium")
+        contract["open_questions"] = []
+        run_ctl(self.root, "new", "--id", "WU-EMPTYQ", "--title", "Empty questions")
+        spec = self.root / "docs/spec/WU-EMPTYQ.md"
+        spec.write_text(contract_core.render_spec(contract, "No open questions remain."), encoding="utf-8")
+        result = run_ctl(self.root, "approve-spec", "--id", "WU-EMPTYQ", "--approved-by", "human:owner", "--approval-ref", "user-confirmation:test", check=False)
+        self.assertEqual(0, result.returncode)
+
     def test_material_spec_change_invalidates_plan_review(self) -> None:
         wu = self.create_valid_wu("WU-C")
         self.plan_approve("WU-C")

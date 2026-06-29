@@ -270,7 +270,11 @@ def _contains_placeholder(value: Any, *, path: Tuple[str, ...] = ()) -> bool:
     if isinstance(value, str):
         return bool(PLACEHOLDER_RE.search(value)) or not value.strip()
     if isinstance(value, list):
-        return not value or any(_contains_placeholder(item, path=path) for item in value)
+        if not value:
+            # open_questions may legitimately be empty (there are no questions).
+            # An empty required list elsewhere signals unfinished content.
+            return not (path and path[0] == "open_questions")
+        return any(_contains_placeholder(item, path=path) for item in value)
     if isinstance(value, dict):
         return any(_contains_placeholder(item, path=(*path, str(key))) for key, item in value.items())
     return value is None
