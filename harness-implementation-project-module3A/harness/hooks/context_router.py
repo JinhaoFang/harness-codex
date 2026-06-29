@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emit small recovery/routing context at session and subagent boundaries."""
+"""Emit small recovery/routing context at subagent and post-compaction boundaries."""
 from __future__ import annotations
 
 import argparse
@@ -50,7 +50,7 @@ def context(base: Path, event_name: str, event: Dict[str, Any]) -> str:
     state = harnessctl.load_json(harnessctl.state_path(wu_path), {})
     status = state.get("status", "unknown")
     platform_session = str(event.get("session_id") or event.get("thread_id") or "").strip()
-    if platform_session and event_name in {"SessionStart", "SubagentStart"}:
+    if platform_session and event_name == "SubagentStart":
         agent_type = str(event.get("agent_type") or event.get("agentType") or "").lower()
         role = os.environ.get("HARNESS_ROLE", "").strip().lower()
         if not role:
@@ -81,7 +81,7 @@ def context(base: Path, event_name: str, event: Dict[str, Any]) -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("event", choices=["SessionStart", "SubagentStart", "PostCompact"])
+    parser.add_argument("event", choices=["SubagentStart", "PostCompact"])
     parser.add_argument("--platform", choices=["codex", "claude"], default="")
     args = parser.parse_args()
     event = load_event()

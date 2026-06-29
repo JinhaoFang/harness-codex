@@ -110,7 +110,7 @@ resume-session: local runtime and platform bindings still exist; continue them
 reconstruct:     local runtime was lost; rebuild conservatively from Spec + Git
 ```
 
-`PreCompact` writes a fresh controller checkpoint; `SessionStart`/`PostCompact` inject only a short pointer. Checkpoints include Work Unit, workspace, branch, base/head, diff, current role, session refs, evidence refs, blockers, and next safe action.
+`PreCompact` writes a fresh controller checkpoint; `PostCompact` injects only a short pointer. Checkpoints include Work Unit, workspace, branch, base/head, diff, current role, session refs, evidence refs, blockers, and next safe action.
 
 Reconstruction never claims that old local plans, receipts, or reviews survived.
 

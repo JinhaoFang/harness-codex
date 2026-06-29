@@ -53,7 +53,6 @@ Installed adapters include:
 
 | Event | Purpose |
 |---|---|
-| `SessionStart` | inject a short repository-grounded recovery pointer |
 | `SubagentStart` | inject role/Work Unit routing context |
 | `PreToolUse` | enforce phase/path/shell policy early |
 | `PreCompact` | write a fresh controller checkpoint/handoff |

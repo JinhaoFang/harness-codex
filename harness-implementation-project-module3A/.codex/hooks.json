@@ -1,17 +1,5 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"$(git rev-parse --show-toplevel)/harness/hooks/context_router.py\" SessionStart --platform codex",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
     "SubagentStart": [
       {
         "matcher": ".*",

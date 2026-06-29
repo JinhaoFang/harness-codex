@@ -809,7 +809,6 @@ for line in sys.stdin:
         codex = json.loads((PROJECT_ROOT / ".codex/hooks.json").read_text(encoding="utf-8"))["hooks"]
         claude = json.loads((PROJECT_ROOT / ".claude/settings.json").read_text(encoding="utf-8"))["hooks"]
         for hooks in (codex, claude):
-            self.assertIn("SessionStart", hooks)
             self.assertIn("PreToolUse", hooks)
             self.assertIn("PreCompact", hooks)
             self.assertIn("PostCompact", hooks)
