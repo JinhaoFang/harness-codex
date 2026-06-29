@@ -306,14 +306,5 @@ def emit_pre_tool_use(decision: str, reason: str, *, platform: str = "codex") ->
     return 0
 
 
-def emit_permission_request(decision: str, reason: str) -> int:
-    if decision == "deny":
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "deny", "message": reason}}}))
-    elif decision == "allow":
-        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "allow"}}}))
-    # No output means Codex keeps its normal approval flow.
-    return 0
-
-
 def emit(decision: str, reason: str) -> int:
     return emit_pre_tool_use(decision, reason, platform=os.environ.get("HARNESS_HOOK_PLATFORM", "codex"))
