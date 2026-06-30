@@ -1,6 +1,6 @@
 # Codex Native Subagent Protocol
 
-This playbook defines the Codex-specific delivery protocol when the parent Codex session uses native subagents instead of controller-managed `dispatch-review` / `dispatch-worker`.
+This playbook defines the Codex-specific delivery protocol when the parent Codex session uses native subagents. This is the primary Codex path. Controller-managed `dispatch-review` / `dispatch-worker` remain adapter utilities, not the expected steady-state workflow for native Codex subagents.
 
 The controller remains lifecycle authority. Native subagents own execution turns; `harnessctl` owns session binding, review requests/verdicts, evidence, and final gates.
 
@@ -72,6 +72,8 @@ harnessctl request-review --id <WU-ID> --mode plan \
 harnessctl start-work --id <WU-ID> \
   --builder-id <WORKER-ID> --builder-session <LOGICAL-WORKER-SESSION>
 ```
+
+When the worker binding already exists, `start-work` may omit `--builder-session`; the controller resolves the bound logical worker session automatically. If `--builder-id` is omitted, the controller derives a stable default worker identity from the bound worker session. Provide an explicit `--builder-id` when the repository wants a human-readable or organization-specific worker identity.
 
 10. Let the worker drive RED/GREEN/final evidence through the controller, following the plan's `acceptance_evidence` levels for final claim proof.
 11. When final evidence is fresh, route again:
@@ -155,3 +157,4 @@ Prefer one long-lived reviewer agent per Work Unit and one worker agent per acti
 - Reviewer session changed after Plan Review: use `reviewer-takeover`.
 - Worker changes after evidence or close review: rerun fresh evidence and review.
 - Hook failed to bind the session: use `bind-session` explicitly rather than guessing.
+- `PreToolUse` is optional. If enabled, keep it narrow on dangerous commands; do not rely on it for ordinary implementation-phase routing.

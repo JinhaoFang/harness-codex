@@ -9,8 +9,6 @@ from policy_common import (
     emit_pre_tool_use,
     extract_command,
     load_event,
-    phase_command_policy,
-    phase_write_policy,
 )
 
 
@@ -32,10 +30,6 @@ def main() -> int:
     root = find_root(Path(str(event.get("cwd") or Path.cwd())))
     tool_name, command = extract_command(event)
     decision, reason = command_policy(tool_name, command)
-    if decision == "allow":
-        decision, reason = phase_command_policy(root, event)
-    if decision == "allow":
-        decision, reason = phase_write_policy(root, event)
     return emit_pre_tool_use(decision, reason, platform=args.platform)
 
 

@@ -627,6 +627,14 @@ def _role_session(root: Path, work_unit_id: str, role: str, explicit: str, env_n
     return value, source, {}
 
 
+def _default_builder_id(binding: Mapping[str, Any], logical_session_id: str) -> str:
+    platform = str(binding.get("platform", "")).strip().lower() or "worker"
+    session = logical_session_id.strip() or str(binding.get("logical_session_id", "")).strip()
+    if not session:
+        return ""
+    return f"worker:{platform}:{session}"
+
+
 def review_independence_errors(verdict: Mapping[str, Any]) -> List[str]:
     errors: List[str] = []
     mode = str(verdict.get("mode", ""))
@@ -1380,8 +1388,10 @@ def start_work(args: argparse.Namespace) -> int:
         raise HarnessError("Implementation cannot start: " + "; ".join(reasons))
     state = load_json(state_path(wu_path), {})
     track = load_json(review_track_path(wu_path), {})
+    builder_session, _source, binding = _role_session(root, work_unit_id, "worker", args.builder_session, "HARNESS_BUILDER_SESSION")
     builder_id = (args.builder_id or os.environ.get("HARNESS_BUILDER_ID", "")).strip()
-    builder_session, _source, _binding = _role_session(root, work_unit_id, "worker", args.builder_session, "HARNESS_BUILDER_SESSION")
+    if not builder_id and binding:
+        builder_id = _default_builder_id(binding, builder_session)
     if not builder_id or not builder_session:
         raise HarnessError("start-work requires builder identity and session.")
     if builder_id in {track.get("reviewer_id"), latest_review_request(wu_path, "plan").get("planner_id") if latest_review_request(wu_path, "plan") else ""}:

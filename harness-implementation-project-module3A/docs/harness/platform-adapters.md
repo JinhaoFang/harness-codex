@@ -54,14 +54,14 @@ Installed adapters include:
 | Event | Purpose |
 |---|---|
 | `SubagentStart` | inject role/Work Unit routing context |
-| `PreToolUse` | enforce phase/path/shell policy early |
+| `PreToolUse` | optionally intercept dangerous shell/tool usage early |
 | `PreCompact` | write a fresh controller checkpoint/handoff |
 | `PostCompact` | restore the compact recovery pointer |
 | `Stop` | checkpoint/handoff reminder; never traps the user in a session |
 
 Hooks are not the sole critical boundary. Controller gates, platform permissions/sandbox, CI, GitHub branch protection, and human gates still apply.
 
-The shell policy permits a controller command only when the entire shell input is one direct controller invocation. `harnessctl ...; destructive-command` and equivalent composition are rejected.
+`PreToolUse` is an optional hardening layer. In the full profile it is kept narrow on purpose: dangerous shell commands may be denied or escalated early, but phase/write-boundary correctness belongs to controller gates such as `start-work`, `verify`, review continuity, scope checks, and final acceptance. Thin shared profiles omit `PreToolUse` entirely.
 
 ## Skills
 

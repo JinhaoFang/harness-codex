@@ -257,6 +257,29 @@ class HarnessV3Tests(unittest.TestCase):
         self.assertEqual(2, run_ctl(self.root, "start-work", "--id", "WU-D", "--builder-id", "worker", "--builder-session", "review-session", check=False).returncode)
         run_ctl(self.root, "start-work", "--id", "WU-D", "--builder-id", "worker", "--builder-session", "worker-session")
 
+    def test_start_work_uses_bound_worker_session_and_default_builder_id(self) -> None:
+        self.create_valid_wu("WU-D-BIND")
+        self.plan_approve("WU-D-BIND", reviewer="reviewer-A", session="review-session", planner="planner-A", planner_session="planner-session")
+        binding = json.loads(
+            run_ctl(
+                self.root,
+                "bind-session",
+                "--id",
+                "WU-D-BIND",
+                "--role",
+                "worker",
+                "--platform",
+                "codex",
+                "--session-id",
+                "worker-session",
+                "--agent-type",
+                "worker",
+            ).stdout
+        )
+        result = json.loads(run_ctl(self.root, "start-work", "--id", "WU-D-BIND").stdout)
+        self.assertEqual(binding["logical_session_id"], result["builder_session_id"])
+        self.assertEqual(f"worker:codex:{binding['logical_session_id']}", result["builder_id"])
+
     def test_plan_reviewer_must_differ_from_planner(self) -> None:
         self.create_valid_wu("WU-D2")
         same_identity = run_ctl(self.root, "request-review", "--id", "WU-D2", "--mode", "plan", "--reviewer-id", "planner-A", "--reviewer-session", "review", "--planner-id", "planner-A", "--planner-session", "planner", check=False)
@@ -449,13 +472,12 @@ class HarnessV3Tests(unittest.TestCase):
         self.assertEqual(main.repository_id, other.repository_id)
         self.assertNotEqual(main.workspace_id, other.workspace_id)
 
-    def test_phase_policy_blocks_product_write_before_implementation(self) -> None:
-        run_ctl(self.root, "new", "--id", "WU-L", "--title", "L")
+    def test_command_policy_blocks_dangerous_shell_usage(self) -> None:
         sys.path.insert(0, str(PROJECT_ROOT / "harness/hooks"))
         try:
             import policy_common  # type: ignore
-            decision, _ = policy_common.phase_write_policy(self.root, {"tool_name": "Write", "tool_input": {"file_path": "src/app.py"}})
-            allowed, _ = policy_common.phase_write_policy(self.root, {"tool_name": "Write", "tool_input": {"file_path": "docs/spec/WU-L.md"}})
+            decision, _ = policy_common.command_policy("Bash", "rm -rf /")
+            allowed, _ = policy_common.command_policy("Write", "")
             self.assertEqual("deny", decision)
             self.assertEqual("allow", allowed)
         finally:
@@ -573,6 +595,8 @@ class HarnessV3Tests(unittest.TestCase):
             binding = harnessctl.session_core.latest(self.root, "WU-HOOK", "reviewer")
             self.assertEqual("codex", binding["platform"])
             self.assertEqual("subagent-session-1", binding["session_id"])
+            state = json.loads((self.root / ".harness/work-units/active/WU-HOOK/state.json").read_text(encoding="utf-8"))
+            self.assertEqual(binding["logical_session_id"], state["observed_logical_session_id"])
         finally:
             sys.path.pop(0)
             sys.modules.pop("harness.hooks.context_router", None)

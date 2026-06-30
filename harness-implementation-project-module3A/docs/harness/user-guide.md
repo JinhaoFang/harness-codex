@@ -79,6 +79,8 @@ harnessctl finalize-check --id WU-123 --strict
 
 When `harnessctl` is not installed globally, vendored repositories can use the repo-local `./harnessctl` wrapper. Thin shared repositories expect an externally installed `harnessctl`.
 
+For native Codex/Claude subagents, the normal path is: bind the observed reviewer/worker session, call `request-review` / `start-work`, let the worker run `verify`, then resume the same reviewer session for close review. `dispatch-review` / `dispatch-worker` remain controller-managed adapter surfaces, mainly for Claude/manual flows and diagnostics.
+
 ## Evidence rules
 
 - The approved contract owns the command as structured `argv[]`.
@@ -105,6 +107,8 @@ The Spec's `delivery.required_checks` lists exact GitHub check names. `github-sy
 `resume-session` requires the local runtime to exist. `reconstruct` reads the tracked Spec and current Git/code, creates a new empty local plan/runtime, and refuses to restore old evidence or verdicts from narrative memory.
 
 The pre-compaction hook writes a fresh checkpoint automatically. Session-start context is a short pointer to authoritative artifacts, not a copied task history.
+
+`PreToolUse` is optional hardening. When enabled, keep it limited to dangerous shell/tool interception. Ordinary phase, scope, and acceptance enforcement belongs to controller gates and repository/platform sandboxing.
 
 ## Archive override
 

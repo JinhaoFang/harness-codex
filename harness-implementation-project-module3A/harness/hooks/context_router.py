@@ -63,8 +63,13 @@ def context(base: Path, event_name: str, event: Dict[str, Any]) -> str:
                 role=role,
                 observed_at=harnessctl.now_iso(),
             )
-            harnessctl.update_state(base, wu_path, checkpoint_reason=f"{event_name.lower()}_session_bound", current_role=role)
-            state["observed_logical_session_id"] = binding.get("logical_session_id", "")
+            state = harnessctl.update_state(
+                base,
+                wu_path,
+                checkpoint_reason=f"{event_name.lower()}_session_bound",
+                current_role=role,
+                observed_logical_session_id=binding.get("logical_session_id", ""),
+            )
         except Exception:
             # Context injection must never claim a binding it could not persist.
             state["observed_logical_session_id"] = ""
