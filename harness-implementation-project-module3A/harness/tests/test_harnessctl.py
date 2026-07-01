@@ -345,6 +345,21 @@ class HarnessV3Tests(unittest.TestCase):
         self.assertEqual(2, stale.returncode)
         self.assertIn("stale", stale.stdout.lower())
 
+    def test_scope_and_evidence_ignore_pre_start_non_wu_changes(self) -> None:
+        wu = self.create_valid_wu("WU-MERGE")
+        self.plan_approve("WU-MERGE")
+        (self.root / "README.md").write_text("pre-start repo churn\n", encoding="utf-8")
+        git(self.root, "add", "README.md")
+        git(self.root, "commit", "-m", "pre-start unrelated change")
+        run_ctl(self.root, "start-work", "--id", "WU-MERGE", "--builder-id", "worker", "--builder-session", "worker-session")
+        state = json.loads((wu / "state.json").read_text(encoding="utf-8"))
+        self.assertEqual(state["head_commit"], state["implementation_base_commit"])
+        (self.root / "src/app.py").write_text("VALUE = 2\n", encoding="utf-8")
+        self.assertEqual(0, run_ctl(self.root, "check", "--id", "WU-MERGE", "--gate", "scope", "--strict").returncode)
+        receipt = json.loads(run_ctl(self.root, "verify", "--id", "WU-MERGE", "--claim", "EV1", "--phase", "final").stdout)
+        self.assertEqual(state["implementation_base_commit"], receipt["base_commit"])
+        self.assertEqual(0, run_ctl(self.root, "check", "--id", "WU-MERGE", "--gate", "verification", "--strict").returncode)
+
     def test_skipped_evidence_blocks_and_is_not_waiver(self) -> None:
         self.create_valid_wu("WU-H")
         self.plan_approve("WU-H")

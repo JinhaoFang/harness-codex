@@ -327,6 +327,10 @@ def update_state(root: Path, wu_path: Path, *, checkpoint_reason: str = "state_t
     return state
 
 
+def implementation_base_commit(state: Mapping[str, Any]) -> str:
+    return str(state.get("implementation_base_commit") or state.get("base_commit", ""))
+
+
 def _new_state(root: Path, work_unit_id: str, risk: str, status: str) -> Dict[str, Any]:
     base = head_commit(root)
     identity = git_identity(root, base)
@@ -350,6 +354,7 @@ def _new_state(root: Path, work_unit_id: str, risk: str, status: str) -> Dict[st
         "builder_session_id": "",
         "current_role": "conductor",
         "base_commit": base,
+        "implementation_base_commit": "",
         "bound_repository_identity": identity["repository_id"],
         "bound_workspace_id": identity["workspace_id"],
         "bound_worktree": identity["worktree"],
@@ -470,7 +475,7 @@ def check_plan(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
 def check_scope(root: Path, wu_path: Path) -> Tuple[str, List[str], List[str]]:
     state = load_json(state_path(wu_path), {})
     allowed, forbidden = scope_patterns(wu_path)
-    snapshot = RepoSnapshot.capture(root, str(state.get("base_commit", "")))
+    snapshot = RepoSnapshot.capture(root, implementation_base_commit(state))
     changed = list(snapshot.implementation_changed_files)
     blocking: List[str] = []
     warnings: List[str] = []
@@ -508,7 +513,7 @@ def verification_detail_report(root: Path, wu_path: Path) -> Tuple[List[Dict[str
         contract = contract_core.load_contract(spec_path(wu_path))
     except contract_core.ContractError as exc:
         return [], [str(exc)], []
-    current_impl = RepoSnapshot.capture(root, str(state.get("base_commit", ""))).implementation_diff_hash
+    current_impl = RepoSnapshot.capture(root, implementation_base_commit(state)).implementation_diff_hash
     details: List[Dict[str, Any]] = []
     blocking: List[str] = []
     warnings: List[str] = []
@@ -1399,7 +1404,7 @@ def start_work(args: argparse.Namespace) -> int:
     plan_request = latest_review_request(wu_path, "plan") or {}
     if builder_session in {track.get("logical_reviewer_session_id"), plan_request.get("planner_session_id")}:
         raise HarnessError("Worker session must differ from planner and reviewer sessions.")
-    state = update_state(root, wu_path, checkpoint_reason="worker_started", status="running", builder_id=builder_id, builder_session_id=builder_session, current_role="worker", blockers=[], next_safe_action="Implement behavior slices with RED reason verification, GREEN, refactor, then final evidence and automatic close review.")
+    state = update_state(root, wu_path, checkpoint_reason="worker_started", status="running", builder_id=builder_id, builder_session_id=builder_session, current_role="worker", implementation_base_commit=head_commit(root), blockers=[], next_safe_action="Implement behavior slices with RED reason verification, GREEN, refactor, then final evidence and automatic close review.")
     print(json.dumps({"work_unit_id": work_unit_id, "status": state["status"], "builder_id": builder_id, "builder_session_id": builder_session}, ensure_ascii=False, indent=2))
     return 0
 
@@ -1420,7 +1425,7 @@ def resume_work(args: argparse.Namespace) -> int:
         raise HarnessError("resume-work requires builder identity and a new/current session.")
     if builder_id == track.get("reviewer_id") or builder_session == track.get("logical_reviewer_session_id"):
         raise HarnessError("Worker cannot reuse reviewer identity/session.")
-    update_state(root, wu_path, checkpoint_reason="worker_resumed", status="running", builder_id=builder_id, builder_session_id=builder_session, current_role="worker", blockers=[], next_safe_action="Continue implementation; rerun all affected final evidence before close review.")
+    update_state(root, wu_path, checkpoint_reason="worker_resumed", status="running", builder_id=builder_id, builder_session_id=builder_session, current_role="worker", implementation_base_commit=head_commit(root), blockers=[], next_safe_action="Continue implementation; rerun all affected final evidence before close review.")
     print(json.dumps({"work_unit_id": work_unit_id, "status": "running", "builder_id": builder_id, "builder_session_id": builder_session}, ensure_ascii=False, indent=2))
     return 0
 
@@ -1496,7 +1501,7 @@ def verify(args: argparse.Namespace) -> int:
     result = "pass" if expected_met else "fail"
     ended = now_iso()
     receipt_id = "ev-" + dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d%H%M%S") + "-" + uuid.uuid4().hex[:6]
-    base = str(state.get("base_commit", ""))
+    base = implementation_base_commit(state)
     log_path = evidence_artifacts_dir(wu_path) / f"{receipt_id}.log"
     try:
         relative_cwd = execution.cwd.relative_to(root.resolve()).as_posix() or "."
@@ -1612,7 +1617,7 @@ def record_skipped(args: argparse.Namespace) -> int:
         raise HarnessError("Skipped verification can only be recorded after implementation has started.")
     check_id = str(claim.get("check_id", ""))
     definition = contract_core.check_definition(contract, check_id)
-    base = str(state.get("base_commit", ""))
+    base = implementation_base_commit(state)
     snapshot = RepoSnapshot.capture(root, base)
     receipt = {
         "schema_version": EVIDENCE_SCHEMA,

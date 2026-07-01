@@ -46,6 +46,12 @@ Platform assets:
 | Thin shared Codex | bounded `AGENTS.md` block, `.codex/`, `.agents/skills/`, `harness.lock`, `harness/project.yaml`, minimal docs |
 | Thin shared Claude Code | bounded `CLAUDE.md` block, `.claude/skills/`, `.claude/settings.json`, `harness.lock`, `harness/project.yaml`, minimal docs |
 
+Profile guidance:
+
+- Use `thin-shared-codex` or `thin-shared-claude` as the default when the repository primarily wants native subagent workflows with minimal local control surfaces.
+- Use full `codex` or `claude` when the repository wants vendored controller/core assets locally.
+- Treat `PreToolUse` as optional hardening. If enabled, keep it narrow on dangerous operations rather than ordinary implementation steering.
+
 ## After installation
 
 1. Replace project-map placeholders in the bounded entrypoint block.

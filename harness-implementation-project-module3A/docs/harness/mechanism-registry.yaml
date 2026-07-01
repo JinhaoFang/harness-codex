@@ -30,14 +30,14 @@ mechanisms:
     removal_condition: "Replace when native platform controls cover the same invariants with lower cost."
     status: active
 
-  - mechanism: phase-write-policy
+  - mechanism: dangerous-operation-hook-hardening
     type: hook
-    purpose: "Prevent product edits during clarification/planning and enforce reviewer read-only/scope boundaries."
-    failure_mode: "Agent silently moves from discussion to implementation or reviewer becomes a second builder."
-    protected_invariant: "Work is bounded and lifecycle roles have explicit capabilities."
-    validation_method: "Hook policy tests plus platform smoke tests."
-    known_cost: "Depends on platform tool events and may require repository-specific path tuning."
-    removal_condition: "Remove if sandbox/policy-as-code supplies equivalent phase and path enforcement."
+    purpose: "Optionally deny or escalate dangerous shell/tool operations before execution."
+    failure_mode: "A destructive or externally risky command runs without an early local control surface."
+    protected_invariant: "High-risk operations can fail closed without freezing ordinary local iteration."
+    validation_method: "Command-policy tests plus platform smoke tests when the hook is installed."
+    known_cost: "Depends on platform tool events, is intentionally incomplete, and must stay narrower than controller acceptance gates."
+    removal_condition: "Remove if platform-native policy or organization guardrails provide equivalent dangerous-operation control."
     status: active
 
   - mechanism: controller-executed-verification

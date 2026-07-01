@@ -25,6 +25,7 @@ def build(state: Mapping[str, Any], *, reason: str, created_at: str) -> Dict[str
         "bound_worktree": state.get("bound_worktree", ""),
         "bound_branch": state.get("bound_branch", ""),
         "base_commit": state.get("base_commit", ""),
+        "implementation_base_commit": state.get("implementation_base_commit", ""),
         "head_commit": state.get("head_commit", ""),
         "diff_hash": state.get("diff_hash", ""),
         "implementation_diff_hash": state.get("implementation_diff_hash", ""),

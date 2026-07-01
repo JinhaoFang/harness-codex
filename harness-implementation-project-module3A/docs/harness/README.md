@@ -13,6 +13,7 @@
 | Need | Document |
 |---|---|
 | Lifecycle and authority boundaries | [workflow.md](workflow.md) |
+| Control posture and mechanism triage | [control-model.md](control-model.md) |
 | Commands and recovery | [user-guide.md](user-guide.md) |
 | Codex native reviewer/worker orchestration | [codex-native-subagents.md](codex-native-subagents.md) |
 | Installing into another repository | [adoption-guide.md](adoption-guide.md) |

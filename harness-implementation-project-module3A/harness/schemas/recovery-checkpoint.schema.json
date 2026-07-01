@@ -14,6 +14,7 @@
     "bound_worktree",
     "bound_branch",
     "base_commit",
+    "implementation_base_commit",
     "head_commit",
     "diff_hash",
     "implementation_diff_hash",
@@ -72,6 +73,9 @@
       "minLength": 1
     },
     "base_commit": {
+      "type": "string"
+    },
+    "implementation_base_commit": {
       "type": "string"
     },
     "head_commit": {
